@@ -712,11 +712,13 @@ AtNode * ProcessPolyMeshBase(
               for( Json::ValueIterator itr = overrides.begin() ; itr != overrides.end() ; itr++ ) 
               {
                 std::string attribute = itr.key().asString();
+
                 const AtNodeEntry* nodeEntry = AiNodeGetNodeEntry(instanceNode);
                 const AtParamEntry* paramEntry = AiNodeEntryLookUpParameter(nodeEntry, attribute.c_str());
 
                 if ( paramEntry != NULL)
                 {
+
                   Json::Value val = args.overrideRoot[*it][itr.key().asString()];
                   if( val.isString() ) 
                     AiNodeSetStr(instanceNode, attribute.c_str(), val.asCString());
@@ -926,7 +928,7 @@ AtNode * ProcessPolyMeshBase(
       {
         for(std::vector<std::string>::iterator it=args.overrides.begin(); it!=args.overrides.end(); ++it)
         {
-          if(name.find(*it) != string::npos || std::find(tags.begin(), tags.end(), *it) != tags.end())
+          if(name.find(*it) != string::npos || std::find(tags.begin(), tags.end(), *it) != tags.end() || matchPattern2(name,*it))
           {
             const Json::Value overrides = args.overrideRoot[*it];
             if(overrides.size() > 0)
@@ -934,6 +936,7 @@ AtNode * ProcessPolyMeshBase(
               for( Json::ValueIterator itr = overrides.begin() ; itr != overrides.end() ; itr++ ) 
               {
                 std::string attribute = itr.key().asString();
+                AiMsgDebug("[ABC] Checking attribute %s for shape %s", attribute.c_str(), name.c_str());
 
                 if (attribute=="smoothing" 
                   || attribute=="subdiv_iterations" 
@@ -946,14 +949,13 @@ AtNode * ProcessPolyMeshBase(
                   || attribute=="disp_zero_value"
                   || attribute=="disp_autobump")
                 {
-                  AiMsgDebug("Checking attribute %s for shape %s", attribute.c_str(), name.c_str());
                   // check if the attribute exists ...
                   const AtNodeEntry* nodeEntry = AiNodeGetNodeEntry(meshNode);
                   const AtParamEntry* paramEntry = AiNodeEntryLookUpParameter(nodeEntry, attribute.c_str());
 
                   if ( paramEntry != NULL)
                   {
-                    AiMsgDebug("attribute %s exists on shape", attribute.c_str());
+                    AiMsgDebug("[ABC] attribute %s exists on shape", attribute.c_str());
                     Json::Value val = args.overrideRoot[*it][itr.key().asString()];
                     if( val.isString() ) 
                       AiNodeSetStr(meshNode, attribute.c_str(), val.asCString());
@@ -1108,7 +1110,7 @@ AtNode * ProcessPolyMeshBase(
           AddArbitraryGeomParams( arbGeomParams, frameSelector, meshNode );
       }
 
-      AiNodeSetBool( meshNode, "smoothing", true );
+      // AiNodeSetBool( meshNode, "smoothing", true ); // disbled to allow the mesh to have hard edges
 
       if (subdiv_iterations > 0)
         {
@@ -1175,7 +1177,7 @@ void ProcessPolyMesh( IPolyMesh &polymesh, ProcArgs &args,
     std::vector<float> nlist;
     std::vector<unsigned int> nidxs;
 
-    AiNodeSetBool(meshNode, "smoothing", true);
+    // AiNodeSetBool(meshNode, "smoothing", true); // Diabled for now so meshes can have hard edges
   
     ProcessIndexedBuiltinParam(
             ps.getNormalsParam(),
