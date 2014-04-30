@@ -554,6 +554,7 @@ AtNode * ProcessPolyMeshBase(
           {
             std::string attribute = itr.key().asString();
             if (attribute=="smoothing" 
+              || attribute=="opaque" 
               || attribute=="subdiv_iterations" 
               || attribute=="subdiv_type"
               || attribute=="subdiv_adaptive_metric"
@@ -939,6 +940,7 @@ AtNode * ProcessPolyMeshBase(
                 AiMsgDebug("[ABC] Checking attribute %s for shape %s", attribute.c_str(), name.c_str());
 
                 if (attribute=="smoothing" 
+                  || attribute=="opaque" 
                   || attribute=="subdiv_iterations" 
                   || attribute=="subdiv_type"
                   || attribute=="subdiv_adaptive_metric"
