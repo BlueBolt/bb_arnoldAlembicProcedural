@@ -563,7 +563,8 @@ AtNode * ProcessPolyMeshBase(
               || attribute=="disp_height"
               || attribute=="disp_padding"
               || attribute=="disp_zero_value"
-              || attribute=="disp_autobump")
+              || attribute=="disp_autobump"
+              || attribute=="invert_normals")
             {
               Json::Value val = args.overrideRoot[*it][itr.key().asString()];
               rootEncode[attribute]=val;
@@ -717,7 +718,7 @@ AtNode * ProcessPolyMeshBase(
                 const AtNodeEntry* nodeEntry = AiNodeGetNodeEntry(instanceNode);
                 const AtParamEntry* paramEntry = AiNodeEntryLookUpParameter(nodeEntry, attribute.c_str());
 
-                if ( paramEntry != NULL)
+                if ( paramEntry != NULL && attribute!="invert_normals")
                 {
 
                   Json::Value val = args.overrideRoot[*it][itr.key().asString()];
@@ -891,9 +892,22 @@ AtNode * ProcessPolyMeshBase(
               }
 
               size_t vidxSize = sample.getFaceIndices()->size();
-              vidxs.reserve( vidxSize );
-              vidxs.insert( vidxs.end(), sample.getFaceIndices()->get(),
-                      sample.getFaceIndices()->get() + vidxSize );
+            vidxs.reserve( vidxSize );
+
+            unsigned int facePointIndex = 0;
+            unsigned int base = 0;
+
+            for (unsigned int i = 0; i < numPolys; ++i)
+            {
+               // reverse the order of the faces
+               int curNum = nsides[i];
+               for (int j = 0; j < curNum; ++j, ++facePointIndex)
+               {
+                  vidxs.push_back((*sample.getFaceIndices())[base+curNum-j-1]);
+
+               }
+               base += curNum;
+            }
           }
 
 
@@ -949,7 +963,8 @@ AtNode * ProcessPolyMeshBase(
                   || attribute=="disp_height"
                   || attribute=="disp_padding"
                   || attribute=="disp_zero_value"
-                  || attribute=="disp_autobump")
+                  || attribute=="disp_autobump"
+                  || attribute=="invert_normals")
                 {
                   // check if the attribute exists ...
                   const AtNodeEntry* nodeEntry = AiNodeGetNodeEntry(meshNode);
@@ -1037,9 +1052,27 @@ AtNode * ProcessPolyMeshBase(
 
          if ( !uvidxs.empty() )
          {
-           AiNodeSetArray(meshNode, "uvidxs",
-                   AiArrayConvert(uvidxs.size(), 1, AI_TYPE_UINT,
-                           &(uvidxs[0])));
+           // we must invert the idxs
+
+           unsigned int facePointIndex = 0;
+           unsigned int base = 0;
+
+           AtArray* uvidxReversed = AiArrayAllocate(uvidxs.size(), 1, AI_TYPE_UINT);
+
+                //AiMsgInfo("sampleTimes.size() %i", sampleTimes.size());
+
+           for (unsigned int i = 0; i < nsides.size() ; ++i)
+           {
+              int curNum = nsides[i];
+              for (int j = 0; j < curNum; ++j, ++facePointIndex)
+                 AiArraySetUInt(uvidxReversed, facePointIndex, uvidxs[base+curNum-j-1]);
+
+
+              base += curNum;
+           }
+
+            AiNodeSetArray(meshNode, "uvidxs",
+                  uvidxReversed);
          }
          else
          {
@@ -1124,7 +1157,10 @@ AtNode * ProcessPolyMeshBase(
 
 
       // add as switch
-      AiNodeSetBool( meshNode, "invert_normals", args.invertNormals );
+      if ( args.invertNormals )
+      {
+       AiNodeSetBool( meshNode, "invert_normals", args.invertNormals );
+      }
 
       if ( args.disp_map != "" )
       {
@@ -1179,16 +1215,52 @@ void ProcessPolyMesh( IPolyMesh &polymesh, ProcArgs &args,
     std::vector<float> nlist;
     std::vector<unsigned int> nidxs;
 
-    // AiNodeSetBool(meshNode, "smoothing", true); // Diabled for now so meshes can have hard edges
-  
-    ProcessIndexedBuiltinParam(
-            ps.getNormalsParam(),
-            sampleTimes,
-            nlist,
-            nidxs,
-            3);
+    // AiNodeSetBool(meshNode, "smoothing", true); // Disabled for now so meshes can have hard edges
+    //TODO: better check
+    if (AiNodeGetArray(meshNode, "vlist")->nkeys == sampleTimes.size())
+    {
+        ProcessIndexedBuiltinParam(
+                ps.getNormalsParam(),
+                sampleTimes,
+                nlist,
+                nidxs,
+                3);
     
+    }
 
+    if ( !nlist.empty() && AiNodeGetStr(meshNode, "subdiv_type") == "none" )
+    {
+        AiNodeSetArray(meshNode, "nlist",
+            AiArrayConvert( nlist.size() / sampleTimes.size(),
+                    sampleTimes.size(), AI_TYPE_FLOAT, (void*)(&(nlist[0]))));
+
+        if ( !nidxs.empty() )
+        {
+
+           // we must invert the idxs
+           //unsigned int facePointIndex = 0;
+           unsigned int base = 0;
+           AtArray* nsides = AiNodeGetArray(meshNode, "nsides");
+           std::vector<unsigned int> nvidxReversed;
+           for (unsigned int i = 0; i < nsides->nelements / nsides->nkeys; ++i)
+           {
+              int curNum = AiArrayGetUInt(nsides ,i);
+              
+              for (int j = 0; j < curNum; ++j)
+              {
+                  nvidxReversed.push_back(nidxs[base+curNum-j-1]);
+              }
+              base += curNum;
+           }
+            AiNodeSetArray(meshNode, "nidxs", AiArrayConvert(nvidxReversed.size(), 1, AI_TYPE_UINT, (void*)&nvidxReversed[0]));
+        }
+        else
+        {
+            AiNodeSetArray(meshNode, "nidxs",
+                    AiArrayConvert(vidxs.size(), 1, AI_TYPE_UINT,
+                            &(vidxs[0])));
+        }
+    }
 
     // if ( !nlist.empty() )
     // {
@@ -1203,15 +1275,15 @@ void ProcessPolyMesh( IPolyMesh &polymesh, ProcArgs &args,
     //        //unsigned int facePointIndex = 0;
     //        unsigned int base = 0;
     //        AtArray* nsides = AiNodeGetArray(meshNode, "nsides");
-    //    std::vector<unsigned int> nvidxReversed;
+    //        std::vector<unsigned int> nvidxReversed;
     //        for (unsigned int i = 0; i < nsides->nelements / nsides->nkeys; ++i)
     //        {
     //           int curNum = AiArrayGetUInt(nsides ,i);
-        
+              
     //           for (int j = 0; j < curNum; ++j)
-    //     {
-    //       nvidxReversed.push_back(nidxs[base+curNum-j-1]);
-    //     }
+    //           {
+    //               nvidxReversed.push_back(nidxs[base+curNum-j-1]);
+    //           }
     //           base += curNum;
     //        }
     //         AiNodeSetArray(meshNode, "nidxs", AiArrayConvert(nvidxReversed.size(), 1, AI_TYPE_UINT, (void*)&nvidxReversed[0]));
@@ -1222,7 +1294,7 @@ void ProcessPolyMesh( IPolyMesh &polymesh, ProcArgs &args,
     //                 AiArrayConvert(vidxs.size(), 1, AI_TYPE_UINT,
     //                         &(vidxs[0])));
     //     }
-    // }    
+    // }
 
 }
 
