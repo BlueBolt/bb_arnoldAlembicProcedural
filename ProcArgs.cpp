@@ -60,6 +60,7 @@ ProcArgs::ProcArgs( const char * paramStr )
   , linkShader(false)
   , linkDisplacement(false)
   , linkOverride(false)
+  , linkUserAttributes(false)
 {    
     // Grab the shutter a camera attached to AiUniverse if present
 

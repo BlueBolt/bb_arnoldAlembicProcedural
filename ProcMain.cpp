@@ -287,7 +287,9 @@ int ProcInit( struct AtNode *node, void **user_ptr )
         return 1;
     } 
 
-    /* Load shaders file*/
+    /* Load shaders file */
+    // FIXME: is there a way of renaming the nodes from this load?
+    //        if not maybe we should look in to having the shaders be in an abc file instead
     if (AiNodeLookUpUserParameter(node, "assShaders") !=NULL )
     {
         const char* assfile = AiNodeGetStr(node, "assShaders");
@@ -298,9 +300,7 @@ int ProcInit( struct AtNode *node, void **user_ptr )
             {
                 if(AiASSLoad(assfile, AI_NODE_SHADER) == 0)
                     g_loadedAss.push_back(std::string(assfile));
-
-            }
-            
+            }            
         }
     }
 
@@ -308,6 +308,7 @@ int ProcInit( struct AtNode *node, void **user_ptr )
     bool skipShaders = false;
     bool skipOverrides = false;
     bool skipDisplacement = false;
+    bool skipUserAttributes = false;
     if (AiNodeLookUpUserParameter(node, "skipJson") !=NULL )
         skipJson = AiNodeGetBool(node, "skipJson");
     if (AiNodeLookUpUserParameter(node, "skipShaders") !=NULL )
@@ -316,14 +317,17 @@ int ProcInit( struct AtNode *node, void **user_ptr )
         skipOverrides = AiNodeGetBool(node, "skipOverrides");
     if (AiNodeLookUpUserParameter(node, "skipDisplacements") !=NULL )
         skipDisplacement = AiNodeGetBool(node, "skipDisplacements");
+    if (AiNodeLookUpUserParameter(node, "skipUserAttributes") !=NULL )
+        skipUserAttributes = AiNodeGetBool(node, "skipUserAttributes");
     
 
     Json::Value jrootShaders;
     Json::Value jrootOverrides;
     Json::Value jrootDisplacements;
+    Json::Value jrootUserAttributes;
     bool parsingSuccessful = false;
 
-    // Load attribute overides if there is a attribute present pointing to an overrides file
+    // Load attribute overrides if there is a attribute present pointing to an overrides file
     if (AiNodeLookUpUserParameter(node, "overridefile") !=NULL && skipJson == false)
     {
         Json::Value jroot;
@@ -361,6 +365,40 @@ int ProcInit( struct AtNode *node, void **user_ptr )
         }
     }
 
+    // Load attribute overrides if there is a attribute present pointing to an overrides file
+    if (AiNodeLookUpUserParameter(node, "userAttributesfile") !=NULL && skipJson == false)
+    {
+        Json::Value jroot;
+        Json::Reader reader;
+        std::ifstream test(AiNodeGetStr(node, "userAttributesfile"), std::ifstream::binary);
+        parsingSuccessful = reader.parse( test, jroot, false );
+        if ( parsingSuccessful )
+        {
+            /* OVERRIDES */
+            if(skipOverrides == false)
+            {
+                jrootUserAttributes = jroot["userAttributes"];
+                if (AiNodeLookUpUserParameter(node, "userAttributes") !=NULL)
+                {
+                    Json::Reader readerOverride;
+                    Json::Value jrootUserAttributesOverrides;
+
+                    if(readerOverride.parse( AiNodeGetStr(node, "userAttributes"), jrootUserAttributesOverrides))
+                    {
+                        for( Json::ValueIterator itr = jrootUserAttributesOverrides.begin() ; itr != jrootUserAttributesOverrides.end() ; itr++ ) 
+                        {
+                            const Json::Value paths = jrootUserAttributesOverrides[itr.key().asString()];
+                            for( Json::ValueIterator attrPath = paths.begin() ; attrPath != paths.end() ; attrPath++ ) 
+                            {
+                                Json::Value attr = paths[attrPath.key().asString()];
+                                jrootUserAttributes[itr.key().asString()][attrPath.key().asString()] = attr;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     // Load shader assignments if there is a attribute present pointing to an shader assignments file
     if (AiNodeLookUpUserParameter(node, "shaderAssignmentfile") !=NULL && skipJson == false)
     {
@@ -494,6 +532,11 @@ int ProcInit( struct AtNode *node, void **user_ptr )
             Json::Reader reader;
             bool parsingSuccessful = reader.parse( AiNodeGetStr(node, "overrides"), jrootOverrides );
         }
+        if (AiNodeLookUpUserParameter(node, "userAttributes") !=NULL  && skipUserAttributes == false)
+        {
+            Json::Reader reader;
+            bool parsingSuccessful = reader.parse( AiNodeGetStr(node, "userAttributes"), jrootUserAttributes );
+        }
         if (AiNodeLookUpUserParameter(node, "shaderAssignation") !=NULL && skipShaders == false)
         {
             Json::Reader reader;
@@ -591,7 +634,6 @@ int ProcInit( struct AtNode *node, void **user_ptr )
             }
         }
     }
-
             
     if( jrootOverrides.size() > 0 )
     {
@@ -605,10 +647,25 @@ int ProcInit( struct AtNode *node, void **user_ptr )
         }
         std::sort(args->overrides.begin(), args->overrides.end());
     }
+
+
+    if( jrootUserAttributes.size() > 0 )
+    {
+        args->linkUserAttributes = true;
+        args->userAttributesRoot = jrootUserAttributes;
+        for( Json::ValueIterator itr = jrootUserAttributes.begin() ; itr != jrootUserAttributes.end() ; itr++ ) 
+        {
+            std::string path = itr.key().asString();
+            args->userAttributes.push_back(path);
+
+        }
+        std::sort(args->userAttributes.begin(), args->userAttributes.end());
+    }
+
+    // Load the alembic file
+    
     IObject root;
     
-    // Load the alembic file
-
     FileCache::iterator I = g_fileCache.find(args->filename);
     if (I != g_fileCache.end())
         root = (*I).second;
