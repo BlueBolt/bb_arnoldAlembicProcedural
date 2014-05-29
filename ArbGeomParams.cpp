@@ -322,6 +322,25 @@ void AddArbitraryStringGeomParam( ICompoundProperty & parent,
 //SetUserData(node, name.c_str(), dataSize, apiType, dataStart);  
 
 
+void AddUserGeomParams( AtNode * primNode, const char * attribute, int arnoldAPIType)
+{
+
+    std::string declStr = GetArnoldTypeString( kConstantScope,
+            arnoldAPIType );
+    if ( declStr.empty() )
+    {
+        return;
+    }    
+    
+    if ( !AiNodeDeclare( primNode, attribute, declStr.c_str() ) )
+    {
+        //TODO, AiWarning
+        return;
+    }
+
+}
+
+
 void AddArbitraryGeomParams( ICompoundProperty &parent,
                              ISampleSelector &sampleSelector,
                              AtNode * primNode,

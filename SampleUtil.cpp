@@ -41,6 +41,21 @@
 #include <OpenEXR/ImathQuat.h>
 #include <OpenEXR/ImathEuler.h>
 
+// Hashing
+const size_t hash( std::string const& s )
+{
+    size_t result = 2166136261U ;
+    std::string::const_iterator end = s.end() ;
+    for ( std::string::const_iterator iter = s.begin() ;
+            iter != end ;
+            ++ iter ) 
+    {
+        result = 127 * result
+                + static_cast< unsigned char >( *iter ) ;
+    }
+    return result ;
+ }
+ 
 //-*****************************************************************************
 void GetRelevantSampleTimes( ProcArgs &args, TimeSamplingPtr timeSampling,
                             size_t numSamples, SampleTimeSet &output,

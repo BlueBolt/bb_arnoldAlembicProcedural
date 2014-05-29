@@ -110,6 +110,7 @@ struct ProcArgs
     std::vector<std::string> overrides;
     std::vector<std::string> userAttributes;
     Json::Value overrideRoot;    
+    Json::Value userAttributesRoot;    
     
     void usage();
 };

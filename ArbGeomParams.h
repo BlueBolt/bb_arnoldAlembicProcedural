@@ -42,6 +42,12 @@
 
 using namespace Alembic::AbcGeom;
 
+
+void AddUserGeomParams( AtNode * primNode, 
+                        const char * attribute, 
+                        int arnoldAPIType
+                      );
+
 void AddArbitraryGeomParams( ICompoundProperty &parent,
                              ISampleSelector &sampleSelector,
                              AtNode * primNode,

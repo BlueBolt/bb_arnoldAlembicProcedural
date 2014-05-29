@@ -42,5 +42,9 @@
 typedef std::vector<std::string> PathList;
 
 void TokenizePath( const std::string &path, PathList &result );
+std::string replace_all(const std::string &str, const char *from, const char *to);
+static std::string translate(const char *pattern);
+bool matchPattern(std::string str, std::string pat);
+
 
 #endif
