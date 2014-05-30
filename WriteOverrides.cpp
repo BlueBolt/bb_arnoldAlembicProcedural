@@ -90,6 +90,7 @@ void ApplyOverrides(std::string name, AtNode* node, std::vector<std::string> tag
             {
               if(attribute == "matte")
               {
+                  AiMsgDebug("[ABC] adding enable_matte to %s", AiNodeGetName(node));
                   AddUserGeomParams(node,"enable_matte",AI_TYPE_BOOLEAN);
                   AiNodeSetBool(node,"enable_matte", val.asBool());
               }
