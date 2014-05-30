@@ -282,8 +282,6 @@ AtNode * ProcessPolyMeshBase(
     Json::FastWriter writer;
     Json::Value rootEncode;
 
-    bool objectMatte = false;
-
     if(args.linkOverride)
     {
       bool foundInPath = false;
@@ -317,11 +315,6 @@ AtNode * ProcessPolyMeshBase(
           for( Json::ValueIterator itr = overrides.begin() ; itr != overrides.end() ; itr++ ) 
           {
             std::string attribute = itr.key().asString();
-
-            if (attribute == "matte")
-            {
-                objectMatte = args.overrideRoot[*it][itr.key().asString()].asBool();
-            }
 
             if (attribute=="smoothing" 
               || attribute=="opaque" 
@@ -408,7 +401,7 @@ AtNode * ProcessPolyMeshBase(
 
         if (args.linkUserAttributes)
         {
-            ApplyUserAttributes(name,instanceNode,args);
+            ApplyUserAttributes(name, instanceNode, tags,  args);
         }
 
         // shader assignation
@@ -416,7 +409,7 @@ AtNode * ProcessPolyMeshBase(
         {
           if(args.linkShader)
           {
-            ApplyShaders(name, instanceNode, tags, args, objectMatte);
+            ApplyShaders(name, instanceNode, tags, args);
           }
           else
           {

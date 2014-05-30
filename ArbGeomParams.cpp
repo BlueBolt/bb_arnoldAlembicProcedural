@@ -67,6 +67,9 @@ std::string GetArnoldTypeString( GeometryScope scope, int arnoldAPIType)
         case AI_TYPE_FLOAT:
             buffer << "FLOAT";
             break;
+        case AI_TYPE_BOOLEAN:
+            buffer << "BOOL";
+            break;
         case AI_TYPE_STRING:
             buffer << "STRING";
             break;
@@ -329,12 +332,13 @@ void AddUserGeomParams( AtNode * primNode, const char * attribute, int arnoldAPI
             arnoldAPIType );
     if ( declStr.empty() )
     {
+        AiMsgWarning ( "[ABC] Cannot add user attribute %s for node \"%s\" with declStr empty", attribute, AiNodeGetName(primNode));
         return;
     }    
     
     if ( !AiNodeDeclare( primNode, attribute, declStr.c_str() ) )
     {
-        //TODO, AiWarning
+        AiMsgWarning ( "[ABC] Cannot add user attribute %s for node \"%s\" with declStr %s", attribute, AiNodeGetName(primNode),declStr.c_str());
         return;
     }
 

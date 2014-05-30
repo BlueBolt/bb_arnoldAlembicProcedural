@@ -36,6 +36,7 @@
 
 #include "PathUtil.h"
 #include "WriteOverrides.h"
+#include "ArbGeomParams.h"
 #include <ai.h>
 #include <sstream>
 
@@ -48,105 +49,115 @@ void ApplyOverrides(std::string name, AtNode* node, std::vector<std::string> tag
    bool foundInPath = false;
    for(std::vector<std::string>::iterator it=args.overrides.begin(); it!=args.overrides.end(); ++it)
    {
-   Json::Value overrides;                        
-   if(it->find("/") != string::npos) // Based on path
-   {
-     if(name.find(*it) != string::npos)
-     {
-       overrides = args.overrideRoot[*it];
-       foundInPath = true;
-     }
-   } 
-   else if(matchPattern(name,*it)) // based on wildcard expression
-   {
-       overrides = args.overrideRoot[*it];
-       foundInPath = true;
-   }
-   else if(foundInPath == false)
-   {
-     if (std::find(tags.begin(), tags.end(), *it) != tags.end())
-     {
-       overrides = args.overrideRoot[*it];
-     }
-   }
+      Json::Value overrides;                        
+      if(it->find("/") != std::string::npos) // Based on path
+      {
+        if(name.find(*it) != std::string::npos)
+        {
+          overrides = args.overrideRoot[*it];
+          foundInPath = true;
+        }
+      } 
+      else if(matchPattern(name,*it)) // based on wildcard expression
+      {
+          overrides = args.overrideRoot[*it];
+          foundInPath = true;
+      }
+      else if(foundInPath == false)
+      {
+        if (std::find(tags.begin(), tags.end(), *it) != tags.end())
+        {
+          overrides = args.overrideRoot[*it];
+        }
+      }
 
-   if(overrides.size() > 0)
-   {
-     for( Json::ValueIterator itr = overrides.begin() ; itr != overrides.end() ; itr++ ) 
-     {
-       std::string attribute = itr.key().asString();
+      if(overrides.size() > 0)
+      {
+        for( Json::ValueIterator itr = overrides.begin() ; itr != overrides.end() ; itr++ ) 
+        {
+          std::string attribute = itr.key().asString();
 
-       const AtNodeEntry* nodeEntry = AiNodeGetNodeEntry(node);
-       const AtParamEntry* paramEntry = AiNodeEntryLookUpParameter(nodeEntry, attribute.c_str());
+          const AtNodeEntry* nodeEntry = AiNodeGetNodeEntry(node);
+          const AtParamEntry* paramEntry = AiNodeEntryLookUpParameter(nodeEntry, attribute.c_str());
 
-       if ( paramEntry != NULL && attribute!="invert_normals")
-       {
+          if ( paramEntry != NULL && attribute!="invert_normals" || attribute == "matte")
+          {
 
-         Json::Value val = args.overrideRoot[*it][itr.key().asString()];
-         if( val.isString() ) 
-           AiNodeSetStr(node, attribute.c_str(), val.asCString());
-         else if( val.isBool() ) 
-           AiNodeSetBool(node, attribute.c_str(), val.asBool());
-         else if( val.isInt() ) 
-         {
-           //make the difference between Byte & int!
-           int typeEntry = AiParamGetType(paramEntry);
-           if(typeEntry == AI_TYPE_BYTE)
-           { 
-             if(attribute=="visibility")
-             {
-               AtByte attrViz = val.asInt();
-               // special case, we must determine it against the general viz.
-               AtByte procViz = AiNodeGetByte( args.proceduralNode, "visibility" );
-               AtByte compViz = AI_RAY_ALL;
-               {
-                 compViz &= ~AI_RAY_GLOSSY;
-                 if(procViz > compViz)
-                   procViz &= ~AI_RAY_GLOSSY;
-                 else
-                   attrViz &= ~AI_RAY_GLOSSY;
-                 compViz &= ~AI_RAY_DIFFUSE;
-                 if(procViz > compViz)
-                   procViz &= ~AI_RAY_DIFFUSE;
-                 else
-                   attrViz &= ~AI_RAY_DIFFUSE;
-                 compViz &= ~AI_RAY_REFRACTED;
-                 if(procViz > compViz)
-                   procViz &= ~AI_RAY_REFRACTED;
-                 else
-                   attrViz &= ~AI_RAY_REFRACTED;
-                 compViz &= ~AI_RAY_REFLECTED;
-                 if(procViz > compViz)
-                   procViz &= ~AI_RAY_REFLECTED;
-                 else
-                   attrViz &= ~AI_RAY_REFLECTED;
-                 compViz &= ~AI_RAY_SHADOW;
-                 if(procViz > compViz)
-                   procViz &= ~AI_RAY_SHADOW;
-                 else
-                   attrViz &= ~AI_RAY_SHADOW;
-                 compViz &= ~AI_RAY_CAMERA;
-                 if(procViz > compViz)
-                   procViz &= ~AI_RAY_CAMERA;
-                 else
-                   attrViz &= ~AI_RAY_CAMERA;
-               }
+            Json::Value val = args.overrideRoot[*it][itr.key().asString()];
+            if( val.isString() ) 
+              AiNodeSetStr(node, attribute.c_str(), val.asCString());
+            else if( val.isBool() )
+            {
+              if(attribute == "matte")
+              {
+                  AddUserGeomParams(node,"enable_matte",AI_TYPE_BOOLEAN);
+                  AiNodeSetBool(node,"enable_matte", val.asBool());
+              }
+              else
+              {
+                  AiNodeSetBool(node, attribute.c_str(), val.asBool());
+              }
+            }
+            else if( val.isInt() ) 
+            {
+              //make the difference between Byte & int!
+              int typeEntry = AiParamGetType(paramEntry);
+              if(typeEntry == AI_TYPE_BYTE)
+              { 
+                if(attribute=="visibility")
+                {
+                  AtByte attrViz = val.asInt();
+                  // special case, we must determine it against the general viz.
+                  AtByte procViz = AiNodeGetByte( args.proceduralNode, "visibility" );
+                  AtByte compViz = AI_RAY_ALL;
+                  {
+                    compViz &= ~AI_RAY_GLOSSY;
+                    if(procViz > compViz)
+                      procViz &= ~AI_RAY_GLOSSY;
+                    else
+                      attrViz &= ~AI_RAY_GLOSSY;
+                    compViz &= ~AI_RAY_DIFFUSE;
+                    if(procViz > compViz)
+                      procViz &= ~AI_RAY_DIFFUSE;
+                    else
+                      attrViz &= ~AI_RAY_DIFFUSE;
+                    compViz &= ~AI_RAY_REFRACTED;
+                    if(procViz > compViz)
+                      procViz &= ~AI_RAY_REFRACTED;
+                    else
+                      attrViz &= ~AI_RAY_REFRACTED;
+                    compViz &= ~AI_RAY_REFLECTED;
+                    if(procViz > compViz)
+                      procViz &= ~AI_RAY_REFLECTED;
+                    else
+                      attrViz &= ~AI_RAY_REFLECTED;
+                    compViz &= ~AI_RAY_SHADOW;
+                    if(procViz > compViz)
+                      procViz &= ~AI_RAY_SHADOW;
+                    else
+                      attrViz &= ~AI_RAY_SHADOW;
+                    compViz &= ~AI_RAY_CAMERA;
+                    if(procViz > compViz)
+                      procViz &= ~AI_RAY_CAMERA;
+                    else
+                      attrViz &= ~AI_RAY_CAMERA;
+                  }
 
-               AiNodeSetByte(node, attribute.c_str(), attrViz);
-             }
-             else
-               AiNodeSetByte(node, attribute.c_str(), val.asInt());
-           }
-           else 
-             AiNodeSetInt(node, attribute.c_str(), val.asInt());
-         }
-         else if( val.isUInt() ) 
-           AiNodeSetUInt(node, attribute.c_str(), val.asUInt());
-         else if( val.isDouble() ) 
-           AiNodeSetFlt(node, attribute.c_str(), val.asDouble());
-       }
-     }
-   }
+                  AiNodeSetByte(node, attribute.c_str(), attrViz);
+                }
+                else
+                  AiNodeSetByte(node, attribute.c_str(), val.asInt());
+              }
+              else 
+                AiNodeSetInt(node, attribute.c_str(), val.asInt());
+            }
+            else if( val.isUInt() ) 
+              AiNodeSetUInt(node, attribute.c_str(), val.asUInt());
+            else if( val.isDouble() ) 
+              AiNodeSetFlt(node, attribute.c_str(), val.asDouble());
+          }
+        }
+      }
 
    }
 }
@@ -158,9 +169,9 @@ void ApplyUserAttributes(std::string name, AtNode* node,std::vector<std::string>
    for(std::vector<std::string>::iterator it=args.userAttributes.begin(); it!=args.userAttributes.end(); ++it)
    {
       Json::Value userAttributes;                        
-      if(it->find("/") != string::npos) // Based on path
+      if(it->find("/") != std::string::npos) // Based on path
       {
-        if(name.find(*it) != string::npos)
+        if(name.find(*it) != std::string::npos)
         {
           userAttributes = args.userAttributesRoot[*it];
           foundInPath = true;
@@ -189,20 +200,30 @@ void ApplyUserAttributes(std::string name, AtNode* node,std::vector<std::string>
 
             Json::Value val = args.userAttributesRoot[*it][attribute];
             if( val.isString() ) 
+            {
               AddUserGeomParams(node,attribute.c_str(),AI_TYPE_STRING);
               AiNodeSetStr(node, attribute.c_str(), val.asCString());
+            } 
             else if( val.isBool() ) 
+            {
               AddUserGeomParams(node,attribute.c_str(),AI_TYPE_BOOLEAN);
               AiNodeSetBool(node, attribute.c_str(), val.asBool());
+            }
             else if( val.isInt() ) 
+            {
               AddUserGeomParams(node,attribute.c_str(),AI_TYPE_INT);
               AiNodeSetInt(node, attribute.c_str(), val.asInt());
+            }
             else if( val.isUInt() ) 
+            {
               AddUserGeomParams(node,attribute.c_str(),AI_TYPE_UINT);
               AiNodeSetUInt(node, attribute.c_str(), val.asUInt());
+            }
             else if(val.isDouble())
+            {
               AddUserGeomParams(node,attribute.c_str(),AI_TYPE_FLOAT);
-              AiNodeSetInt(node, attribute.c_str(), val.asDouble());
+              AiNodeSetFlt(node, attribute.c_str(), val.asDouble());
+            }
             // TODO color, matrix, vector
 
          }
@@ -210,7 +231,7 @@ void ApplyUserAttributes(std::string name, AtNode* node,std::vector<std::string>
    }
 }
 
-void ApplyShaders(std::string name, AtNode* node, std::vector<std::string> tags, ProcArgs & args, bool matte)
+void ApplyShaders(std::string name, AtNode* node, std::vector<std::string> tags, ProcArgs & args)
 {
    bool foundInPath = false;
    AtNode* appliedShader = NULL;
@@ -218,9 +239,9 @@ void ApplyShaders(std::string name, AtNode* node, std::vector<std::string> tags,
    {
 
      //check both path & tag
-     if(it->first.find("/") != string::npos)
+     if(it->first.find("/") != std::string::npos)
      {
-       if(name.find(it->first) != string::npos)
+       if(name.find(it->first) != std::string::npos)
        {
          appliedShader = it->second;
          foundInPath = true;
@@ -242,22 +263,12 @@ void ApplyShaders(std::string name, AtNode* node, std::vector<std::string> tags,
 
    if(appliedShader != NULL)
    {
-     AiMsgDebug("[ABC] Assigning shader  %s to %s", AiNodeGetName(appliedShader), AiNodeGetName(node));
+     std::string newName = std::string(AiNodeGetName(appliedShader)) + std::string("_") + name;
      AtArray* shaders = AiArrayAllocate( 1 , 1, AI_TYPE_NODE);
      
-     if(matte)
-     {
-       std::string shaderName =  newName + std::string("_BlackHole");
-       AtNode* matteShader = AiNode ("Blackhole");
-       AiNodeSetStr(matteShader, "name", shaderName.c_str());
-       AiNodeLink (appliedShader, "input", matteShader);
-       AiArraySetPtr(shaders, 0, matteShader);
-     }
-     else
-     {
-       AiArraySetPtr(shaders, 0, appliedShader);
-     }  
-
+     AiMsgDebug("[ABC] Assigning shader  %s to %s", AiNodeGetName(appliedShader), AiNodeGetName(node));
+     AiArraySetPtr(shaders, 0, appliedShader);
+     
      AiNodeSetArray(node, "shader", shaders);
    }
    else

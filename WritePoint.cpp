@@ -405,14 +405,7 @@ AtNode * ProcessPointsBase(
 
 	}
 
-	ICompoundProperty arbPointsParams = ps.getArbGeomParams();
-
-    for ( size_t i = 0; i < arbPointsParams.getNumProperties(); ++i )
-    {
-        const PropertyHeader &propHeader = arbPointsParams.getPropertyHeader( i );
-        const std::string &propName = propHeader.getName();
-	}
-
+   AddArbitraryGeomParams( arbGeomParams, frameSelector, pointsNode );
     
     if ( instanceNode == NULL )
 	{
@@ -427,7 +420,7 @@ AtNode * ProcessPointsBase(
     {
         AiNodeSetByte( pointsNode, "visibility", 0 );
 
-		AiNodeSetInt( pointsNode, "mode", 1 );
+		  AiNodeSetInt( pointsNode, "mode", 1 );
         
         AiNodeSetPtr(instanceNode, "node", pointsNode );
         g_meshCache[cacheId] = pointsNode;
