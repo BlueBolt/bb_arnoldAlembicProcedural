@@ -38,193 +38,23 @@
 //
 
 #include "WriteGeo.h"
+#include "WriteTransform.h"
+#include "WriteOverrides.h"
 #include "ArbGeomParams.h"
+#include "PathUtil.h"
 
 #include <ai.h>
 #include <sstream>
-#include <algorithm> 
 
 #include <boost/regex.hpp>
+// #include <boost/thread.hpp>
 //-*****************************************************************************
-
-const size_t hashStr( std::string const& s )
-{
-    size_t result = 2166136261U ;
-    std::string::const_iterator end = s.end() ;
-    for ( std::string::const_iterator iter = s.begin() ;
-            iter != end ;
-            ++ iter ) 
-  {
-        result = 127 * result
-                + static_cast< unsigned char >( *iter ) ;
-    }
-    return result ;
- }
-
 
 #if AI_VERSION_ARCH_NUM == 3
     #if AI_VERSION_MAJOR_NUM < 4
         #define AiNodeGetNodeEntry(node)   ((node)->base_node)
     #endif
 #endif
-
-bool nodeHasParameter( struct AtNode * node, const std::string & paramName)
-{
-    return AiNodeEntryLookUpParameter( AiNodeGetNodeEntry( node ),
-            paramName.c_str() ) != NULL;
-}
-
-/*
- * Return a new string with all occurrences of 'from' replaced with 'to'
- */
-std::string replace_all(const std::string &str, const char *from, const char *to)
-{
-    std::string result(str);
-    std::string::size_type
-        index = 0,
-        from_len = strlen(from),
-        to_len = strlen(to);
-    while ((index = result.find(from, index)) != std::string::npos) {
-        result.replace(index, from_len, to);
-        index += to_len;
-    }
-    return result;
-}
-
-/*
- * Translate a shell pattern into a regular expression
- * This is a direct translation of the algorithm defined in fnmatch.py.
- */
-static std::string translate(const char *pattern)
-{
-    int i = 0, n = strlen(pattern);
-    std::string result;
- 
-    while (i < n) {
-        char c = pattern[i];
-        ++i;
- 
-        if (c == '*') {
-            result += ".*";
-        } else if (c == '?') {
-            result += '.';
-        } else if (c == '[') {
-            int j = i;
-            /*
-             * The following two statements check if the sequence we stumbled
-             * upon is '[]' or '[!]' because those are not valid character
-             * classes.
-             */
-            if (j < n && pattern[j] == '!')
-                ++j;
-            if (j < n && pattern[j] == ']')
-                ++j;
-            /*
-             * Look for the closing ']' right off the bat. If one is not found,
-             * escape the opening '[' and continue.  If it is found, process
-             * the contents of '[...]'.
-             */
-            while (j < n && pattern[j] != ']')
-                ++j;
-            if (j >= n) {
-                result += "\\[";
-            } else {
-                std::string stuff = replace_all(std::string(&pattern[i], j - i), "\\", "\\\\");
-                char first_char = pattern[i];
-                i = j + 1;
-                result += "[";
-                if (first_char == '!') {
-                    result += "^" + stuff.substr(1);
-                } else if (first_char == '^') {
-                    result += "\\" + stuff;
-                } else {
-                    result += stuff;
-                }
-                result += "]";
-            }
-        } else {
-            if (isalnum(c)) {
-                result += c;
-            } else {
-                result += "\\";
-                result += c;
-            }
-        }
-    }
-    /*
-     * Make the expression multi-line and make the dot match any character at all.
-     */
-    return result + "\\Z(?ms)";
-}
- 
-
-
-bool matchPattern(std::string str, std::string pat)
-{
-    // given a path name and a pattern see if the path string matches the pattern
-    bool found = false;
-    std::vector<std::string> parts;
-    std::string temp;
-    if (pat == "*") // pattern is * 
-        return true;
-    if (pat.size() - 1 > str.size()) // pattern string is bigger then input string
-        return false;
-
-    std::string::const_iterator it = pat.begin(), end = pat.end();
-    size_t counter = 0;
-    while (it != end)
-    {
-        if (*it != '*')
-            temp += *it;
-        if (*it == '*')
-        {
-            parts.push_back(temp);
-            temp = "";
-        }
-        it++;
-    }
-    parts.push_back(temp);
-    std::vector<std::string>::const_iterator vecIt = parts.begin(), vecEnd = parts.end();
-    if (!parts[0].empty())
-    {
-        if (parts[0] != str.substr(0, parts[0].size()))
-            return false;
-    }
-    else
-        vecIt++;
-    size_t size = str.size();
-    size_t pos = 0;
-    size_t tempSize;
-    while (vecIt != vecEnd)
-    {
-        temp = *vecIt;
-        tempSize = temp.size();
-        if (temp.empty())
-            return true;
-        while (pos + tempSize < size)
-        {
-            if (temp == str.substr(pos, temp.size()))
-            {
-                str.erase(0, pos + temp.size());
-                found = true;
-                break;
-            }
-            pos++;
-        }
-        if (found == false)
-            return false;
-        pos = 0;
-        vecIt++;
-    }
-    return true;
-}
-
-bool matchPattern2(std::string str, std::string pat)
-{
-    boost::regex rx (translate(pat.c_str()).c_str());
-    bool result = boost::regex_search(str,rx);
-    return result;
-}
 
 void getInstanceName(char *buf, size_t bufsize, const char* name)
 {
@@ -237,78 +67,6 @@ void getInstanceName(char *buf, size_t bufsize, const char* name)
        }
        index++;
    }
-}
-
-
-//-*****************************************************************************
-
-void ApplyTransformation( struct AtNode * node, 
-        MatrixSampleMap * xformSamples, ProcArgs &args )
-{
-    if ( !node || !xformSamples || xformSamples->empty() )
-    {
-        return;
-    }
-    
-    // confirm that this node has a parameter
-    if ( !nodeHasParameter( node, "matrix" ) )
-    {
-        return;
-    }
-    
-    // check to see that we're not a single identity matrix
-    if (xformSamples->size() == 1 &&
-            xformSamples->begin()->second == Imath::M44d())
-    {
-        return;
-    }
-    
-    std::vector<float> sampleTimes;
-    sampleTimes.reserve(xformSamples->size());
-    
-    std::vector<float> mlist;
-    mlist.reserve( 16* xformSamples->size() );
-    
-    for ( MatrixSampleMap::iterator I = xformSamples->begin();
-            I != xformSamples->end(); ++I )
-    {
-        // build up a vector of relative sample times to feed to 
-        // "transform_time_samples" or "time_samples"
-        sampleTimes.push_back( GetRelativeSampleTime(args, (*I).first) );
-        
-        
-        for (int i = 0; i < 16; i++)
-        {
-            mlist.push_back( (*I).second.getValue()[i] );
-        }
-    }
-    
-    AiNodeSetArray(node, "matrix",
-                ArrayConvert(1, xformSamples->size(),
-                        AI_TYPE_MATRIX, &mlist[0]));
-        
-    if ( sampleTimes.size() > 1 )
-    {
-        // persp_camera calls it time_samples while the primitives call it
-        // transform_time_samples
-        if ( nodeHasParameter( node, "transform_time_samples" ) )
-        {
-            AiNodeSetArray(node, "transform_time_samples",
-                            ArrayConvert(sampleTimes.size(), 1,
-                                    AI_TYPE_FLOAT, &sampleTimes[0]));
-        }
-        else if ( nodeHasParameter( node, "time_samples" ) )
-        {
-            AiNodeSetArray(node, "time_samples",
-                            ArrayConvert(sampleTimes.size(), 1,
-                                    AI_TYPE_FLOAT, &sampleTimes[0]));
-        }
-        else
-        {
-            //TODO, warn if neither is present? Should be there in all
-            //commercial versions of arnold by now.
-        }
-    }
 }
 
 //-*****************************************************************************
@@ -438,7 +196,7 @@ AtNode * ProcessPolyMeshBase(
     
     // check if this meshes name matches the search pattern in the arguments
 
-    if ( !matchPattern2(name,args.pattern) && args.pattern != "*" && args.pattern != "" )
+    if ( !matchPattern(name,args.pattern) && args.pattern != "*" && args.pattern != "" )
     {
         return NULL;
     }
@@ -454,7 +212,7 @@ AtNode * ProcessPolyMeshBase(
     ISampleSelector frameSelector( *singleSampleTimes.begin() );
     std::vector<std::string> tags;
 
-    //get tags
+    // get tags
     if ( arbGeomParams != NULL && arbGeomParams.valid() )
     {
       if (arbGeomParams.getPropertyHeader("mtoa_constant_tags") != NULL)
@@ -500,7 +258,7 @@ AtNode * ProcessPolyMeshBase(
           }
 
         }
-        else if(matchPattern2(name,it->first)) // based on wildcard expression
+        else if(matchPattern(name,it->first)) // based on wildcard expression
         {
             appliedDisplacement = it->second;
             foundInPath = true;
@@ -522,8 +280,10 @@ AtNode * ProcessPolyMeshBase(
     std::string hashAttributes("@");
     Json::FastWriter writer;
     Json::Value rootEncode;
+
     if(args.linkOverride)
     {
+      bool foundInPath = false;
       for(std::vector<std::string>::iterator it=args.overrides.begin(); it!=args.overrides.end(); ++it)
       {
         Json::Value overrides;
@@ -532,14 +292,16 @@ AtNode * ProcessPolyMeshBase(
           if(name.find(*it) != string::npos)
           {
             overrides = args.overrideRoot[*it];
+            foundInPath = true;
           }
 
         }
-        else if(matchPattern2(name,*it)) // based on wildcard expression
+        else if(matchPattern(name,*it)) // based on wildcard expression
         {
             overrides = args.overrideRoot[*it];
+            foundInPath = true;
         }
-        else
+        else if(foundInPath == false)
         {
           if (std::find(tags.begin(), tags.end(), *it) != tags.end())
           {
@@ -547,12 +309,12 @@ AtNode * ProcessPolyMeshBase(
           }
         }
 
-
         if(overrides.size() > 0)
         {
           for( Json::ValueIterator itr = overrides.begin() ; itr != overrides.end() ; itr++ ) 
           {
             std::string attribute = itr.key().asString();
+
             if (attribute=="smoothing" 
               || attribute=="opaque" 
               || attribute=="subdiv_iterations" 
@@ -584,56 +346,8 @@ AtNode * ProcessPolyMeshBase(
 
     AtNode * instanceNode = NULL;
     
-    // detect if this node is already in the scene if so generate a ginstance and apply the transform to it
-
-    AtNode *masterProc = AiNodeLookUpByName(name.c_str());
-    // if(masterProc)
-    // {
-
-    //   instanceNode = AiNode( "ginstance" );
-
-    //   // get the name for this instance
-      
-    //   char name_buff[1024]; // name buffer
-      
-    //   getInstanceName(name_buff, sizeof(name_buff), name.c_str());
-
-    //   AiNodeSetStr( instanceNode, "name", name_buff );
-    //   AiNodeSetPtr(instanceNode, "node", masterProc);
-    //   AiNodeSetBool(instanceNode, "inherit_xform", false);
-      
-    //   AtMatrix matrix;
-    //   AtVector scaleVector;
-    //   AiV3Create(scaleVector, 1, 1, 1);
-    //   AiM4Scaling(matrix, &scaleVector);
-    //   AiNodeSetMatrix(instanceNode, "matrix", matrix);
-
-    //   if ( args.proceduralNode )
-    //   {
-    //       AiNodeSetByte( instanceNode, "visibility",
-    //       AiNodeGetByte( args.proceduralNode, "visibility" ) );
-    //   }
-    //   else
-    //   {
-    //       AiNodeSetByte( instanceNode, "visibility", AI_RAY_ALL );
-    //   }
-
-    //   //apply the transform to this instance
-    //   ApplyTransformation( instanceNode, xformSamples, args );
-
-    //   // add this guy to the list of created nodes
-    //   args.createdNodes.push_back(instanceNode);
-
-    //   // return instanceNode;
-    // }
-
-    // } else {
-
-      // We may want to move this out of Write Geo for polymesh 
-      // so we can use it for the other geo types.  
-      
-      if ( args.makeInstance  )
-      {
+    if ( args.makeInstance  )
+    {
         std::ostringstream buffer;
         AbcA::ArraySampleKey sampleKey;
         
@@ -649,7 +363,7 @@ AtNode * ProcessPolyMeshBase(
             buffer << ":";
         }
         
-        buffer << "@" << hashStr(hashAttributes);
+        buffer << "@" << hash(hashAttributes);
         buffer << "@" << facesetName;
         
         cacheId = buffer.str();
@@ -674,170 +388,27 @@ AtNode * ProcessPolyMeshBase(
         
         // adding arbitary parameters
 
-        AddArbitraryGeomParams(
-            arbGeomParams,
-            frameSelector,
-                instanceNode );
+        AddArbitraryGeomParams( arbGeomParams, frameSelector, instanceNode );
 
         NodeCache::iterator I = g_meshCache.find(cacheId);
 
         // start param overrides on instance
         if(args.linkOverride)
         {
-          bool foundInPath = false;
-          for(std::vector<std::string>::iterator it=args.overrides.begin(); it!=args.overrides.end(); ++it)
-          {
-            Json::Value overrides;                        
-            if(it->find("/") != string::npos) // Based on path
-            {
-              if(name.find(*it) != string::npos)
-              {
-                overrides = args.overrideRoot[*it];
-                foundInPath = true;
-              }
-            } 
-            else if(matchPattern2(name,*it)) // based on wildcard expression
-            {
-                overrides = args.overrideRoot[*it];
-                foundInPath = true;
-            }
-            else if(foundInPath == false)
-            {
-              if (std::find(tags.begin(), tags.end(), *it) != tags.end())
-              {
-                overrides = args.overrideRoot[*it];
-              }
-            }
+            ApplyOverrides(name, instanceNode, tags, args );
+        }   
 
-            if(overrides.size() > 0)
-            {
-              for( Json::ValueIterator itr = overrides.begin() ; itr != overrides.end() ; itr++ ) 
-              {
-                std::string attribute = itr.key().asString();
-
-                const AtNodeEntry* nodeEntry = AiNodeGetNodeEntry(instanceNode);
-                const AtParamEntry* paramEntry = AiNodeEntryLookUpParameter(nodeEntry, attribute.c_str());
-
-                if ( paramEntry != NULL && attribute!="invert_normals")
-                {
-
-                  Json::Value val = args.overrideRoot[*it][itr.key().asString()];
-                  if( val.isString() ) 
-                    AiNodeSetStr(instanceNode, attribute.c_str(), val.asCString());
-                  else if( val.isBool() ) 
-                    AiNodeSetBool(instanceNode, attribute.c_str(), val.asBool());
-                  else if( val.isInt() ) 
-                  {
-                    //make the difference between Byte & int!
-                    int typeEntry = AiParamGetType(paramEntry);
-                    if(typeEntry == AI_TYPE_BYTE)
-                    { 
-                      if(attribute=="visibility")
-                      {
-                        AtByte attrViz = val.asInt();
-                        // special case, we must determine it against the general viz.
-                        AtByte procViz = AiNodeGetByte( args.proceduralNode, "visibility" );
-                        AtByte compViz = AI_RAY_ALL;
-                        {
-                          compViz &= ~AI_RAY_GLOSSY;
-                          if(procViz > compViz)
-                            procViz &= ~AI_RAY_GLOSSY;
-                          else
-                            attrViz &= ~AI_RAY_GLOSSY;
-                          compViz &= ~AI_RAY_DIFFUSE;
-                          if(procViz > compViz)
-                            procViz &= ~AI_RAY_DIFFUSE;
-                          else
-                            attrViz &= ~AI_RAY_DIFFUSE;
-                          compViz &= ~AI_RAY_REFRACTED;
-                          if(procViz > compViz)
-                            procViz &= ~AI_RAY_REFRACTED;
-                          else
-                            attrViz &= ~AI_RAY_REFRACTED;
-                          compViz &= ~AI_RAY_REFLECTED;
-                          if(procViz > compViz)
-                            procViz &= ~AI_RAY_REFLECTED;
-                          else
-                            attrViz &= ~AI_RAY_REFLECTED;
-                          compViz &= ~AI_RAY_SHADOW;
-                          if(procViz > compViz)
-                            procViz &= ~AI_RAY_SHADOW;
-                          else
-                            attrViz &= ~AI_RAY_SHADOW;
-                          compViz &= ~AI_RAY_CAMERA;
-                          if(procViz > compViz)
-                            procViz &= ~AI_RAY_CAMERA;
-                          else
-                            attrViz &= ~AI_RAY_CAMERA;
-                        }
-
-                        AiNodeSetByte(instanceNode, attribute.c_str(), attrViz);
-                      }
-                      else
-                        AiNodeSetByte(instanceNode, attribute.c_str(), val.asInt());
-                    }
-                    else 
-                      AiNodeSetInt(instanceNode, attribute.c_str(), val.asInt());
-                  }
-                  else if( val.isUInt() ) 
-                    AiNodeSetUInt(instanceNode, attribute.c_str(), val.asUInt());
-                  else if( val.isDouble() ) 
-                    AiNodeSetFlt(instanceNode, attribute.c_str(), val.asDouble());
-                }
-              }
-            }
-
-          }
-        } // end param overrides
-
+        if (args.linkUserAttributes)
+        {
+            ApplyUserAttributes(name, instanceNode, tags,  args);
+        }
 
         // shader assignation
         if (nodeHasParameter( instanceNode, "shader" ) )
         {
           if(args.linkShader)
           {
-            bool foundInPath = false;
-            AtNode* appliedShader = NULL;
-            for(std::map<std::string, AtNode*>::iterator it = args.shaders.begin(); it != args.shaders.end(); ++it) 
-            {
-
-              //check both path & tag
-              if(it->first.find("/") != string::npos)
-              {
-                if(name.find(it->first) != string::npos)
-                {
-                  appliedShader = it->second;
-                  foundInPath = true;
-                }
-              }
-              else if(matchPattern2(name,it->first)) // based on wildcard expression
-              {
-
-                 AiMsgDebug("[ABC] Shader pattern '%s' matched %s",it->first.c_str(), name.c_str());
-                 appliedShader = it->second;
-                 foundInPath = true;
-              }
-              else if(foundInPath == false)
-              {
-                if (std::find(tags.begin(), tags.end(), it->first) != tags.end())
-                  appliedShader = it->second;
-              }
-            }
-
-            if(appliedShader != NULL)
-            {
-              AiMsgDebug("[ABC] Assigning shader  %s to %s", AiNodeGetName(appliedShader), AiNodeGetName(instanceNode));
-              AtArray* shaders = AiArrayAllocate( 1 , 1, AI_TYPE_NODE);
-              AiArraySetPtr(shaders, 0, appliedShader);
-              AiNodeSetArray(instanceNode, "shader", shaders);
-            }
-            else
-            {
-              AtArray* shaders = AiNodeGetArray(args.proceduralNode, "shader");
-              if (shaders->nelements != 0)
-                 AiNodeSetArray(instanceNode, "shader", AiArrayCopy(shaders));
-            }
-
+            ApplyShaders(name, instanceNode, tags, args);
           }
           else
           {
@@ -846,52 +417,50 @@ AtNode * ProcessPolyMeshBase(
                AiNodeSetArray(instanceNode, "shader", AiArrayCopy(shaders));
           }
         } // end shader assignment
-
-        if ( masterProc )
+        
+        if ( I != g_meshCache.end() ) 
         {
-           AiNodeSetPtr(instanceNode, "node", masterProc );
-           return NULL;
-        } else if ( I != g_meshCache.end() ) {
            AiNodeSetPtr(instanceNode, "node", (*I).second );
            return NULL;
         }
 
-      } // end makeinstance
+    } // end makeinstance
     
-      std::vector<AtByte> nsides;
-      std::vector<float> vlist;
+    std::vector<AtByte> nsides;
+    std::vector<float> vlist;
 
-      std::vector<float> uvlist;
-      std::vector<unsigned int> uvidxs;
+    std::vector<float> uvlist;
+    std::vector<unsigned int> uvidxs;
 
-      // POTENTIAL OPTIMIZATIONS LEFT TO THE READER
-      // 1) vlist needn't be copied if it's a single sample
+    // POTENTIAL OPTIMIZATIONS LEFT TO THE READER
+    // 1) vlist needn't be copied if it's a single sample
 
-      bool isFirstSample = true;
-      for ( SampleTimeSet::iterator I = sampleTimes.begin();
-            I != sampleTimes.end(); ++I, isFirstSample = false)
-      {
-          ISampleSelector sampleSelector( *I );
-          typename primT::schema_type::Sample sample = ps.getValue( sampleSelector );
+    size_t numSampleTimes = sampleTimes.size();
+    bool isFirstSample = true;
+    for ( SampleTimeSet::iterator I = sampleTimes.begin();
+        I != sampleTimes.end(); ++I, isFirstSample = false)
+    {
+        ISampleSelector sampleSelector( *I );
+        typename primT::schema_type::Sample sample = ps.getValue( sampleSelector );
 
-          if ( isFirstSample )
-          {
-              size_t numPolys = sample.getFaceCounts()->size();
-              nsides.reserve( sample.getFaceCounts()->size() );
-              for ( size_t i = 0; i < numPolys; ++i )
+        if ( isFirstSample )
+        {
+            size_t numPolys = sample.getFaceCounts()->size();
+            nsides.reserve( sample.getFaceCounts()->size() );
+            for ( size_t i = 0; i < numPolys; ++i )
+            {
+              int32_t n = sample.getFaceCounts()->get()[i];
+
+              if ( n > 255 )
               {
-                  int32_t n = sample.getFaceCounts()->get()[i];
-
-                  if ( n > 255 )
-                  {
-                      // TODO, warning about unsupported face
-                      return NULL;
-                  }
-
-                  nsides.push_back( (AtByte) n );
+                  // TODO, warning about unsupported face
+                  return NULL;
               }
 
-              size_t vidxSize = sample.getFaceIndices()->size();
+              nsides.push_back( (AtByte) n );
+            }
+
+            size_t vidxSize = sample.getFaceIndices()->size();
             vidxs.reserve( vidxSize );
 
             unsigned int facePointIndex = 0;
@@ -908,284 +477,316 @@ AtNode * ProcessPolyMeshBase(
                }
                base += curNum;
             }
-          }
-
-
-          vlist.reserve( vlist.size() + sample.getPositions()->size() * 3);
-          vlist.insert( vlist.end(),
-                  (const float32_t*) sample.getPositions()->get(),
-                  ((const float32_t*) sample.getPositions()->get()) +
-                          sample.getPositions()->size() * 3 );
-      }
-
-      /* Apply uvs to geo */
-      /* TODO add uv archive as an input */
-      ProcessIndexedBuiltinParam(
-              ps.getUVsParam(),
-              singleSampleTimes,
-              uvlist,
-              uvidxs,
-              2);
-
-      AtNode* meshNode = AiNode( "polymesh" );
-
-      if (!meshNode)
-      {
-          AiMsgError("Failed to make polymesh node for %s",
-                  prim.getFullName().c_str());
-          return NULL;
-      }
-
-      args.createdNodes.push_back(meshNode);
-
-      // Attribute overrides. We assume instance mode all the time here.
-      if(args.linkOverride)
-      {
-        for(std::vector<std::string>::iterator it=args.overrides.begin(); it!=args.overrides.end(); ++it)
+        }
+  
+        if(numSampleTimes == 1 && (args.shutterOpen != args.shutterClose) && (ps.getVelocitiesProperty().valid()) && isFirstSample )
         {
-          if(name.find(*it) != string::npos || std::find(tags.begin(), tags.end(), *it) != tags.end() || matchPattern2(name,*it))
-          {
-            const Json::Value overrides = args.overrideRoot[*it];
-            if(overrides.size() > 0)
+            float scaleVelocity = 1.0f;
+            if (AiNodeLookUpUserParameter(args.proceduralNode, "scaleVelocity") !=NULL )
+                scaleVelocity = AiNodeGetFlt(args.proceduralNode, "scaleVelocity");
+
+            Alembic::Abc::V3fArraySamplePtr velptr = sample.getVelocities();
+            Alembic::Abc::P3fArraySamplePtr v3ptr = sample.getPositions();
+            size_t pSize = sample.getPositions()->size(); 
+            vlist.resize(pSize*3*2);
+            numSampleTimes = 2;
+            float timeoffset = ((args.frame / args.fps) - ts->getFloorIndex((*I), ps.getNumSamples()).second) * args.fps;
+            for ( size_t vId = 0; vId < pSize; ++vId )
             {
-              for( Json::ValueIterator itr = overrides.begin() ; itr != overrides.end() ; itr++ ) 
+                
+                Alembic::Abc::V3f posAtOpen = ((*v3ptr)[vId] + (*velptr)[vId] * scaleVelocity *-timeoffset);
+                vlist[3*vId + 0] = posAtOpen.x;
+                vlist[3*vId + 1] = posAtOpen.y;
+                vlist[3*vId + 2] = posAtOpen.z;
+
+                Alembic::Abc::V3f posAtEnd = ((*v3ptr)[vId] + (*velptr)[vId] * scaleVelocity *(1.0f-timeoffset));
+                vlist[3*vId + 3*pSize + 0] = posAtEnd.x;
+                vlist[3*vId + 3*pSize + 1] = posAtEnd.y;
+                vlist[3*vId + 3*pSize + 2] = posAtEnd.z;            
+            }
+        }
+        else
+        {
+            vlist.reserve( vlist.size() + sample.getPositions()->size() * 3);
+            vlist.insert( vlist.end(),
+                    (const float32_t*) sample.getPositions()->get(),
+                    ((const float32_t*) sample.getPositions()->get()) +
+                            sample.getPositions()->size() * 3 );
+        }
+    }
+
+    /* Apply uvs to geo */
+    /* TODO add uv archive as an input */
+    ProcessIndexedBuiltinParam(
+          ps.getUVsParam(),
+          singleSampleTimes,
+          uvlist,
+          uvidxs,
+          2);
+
+    AtNode* meshNode = AiNode( "polymesh" );
+
+    if (!meshNode)
+    {
+      AiMsgError("Failed to make polymesh node for %s",
+              prim.getFullName().c_str());
+      return NULL;
+    }
+
+    args.createdNodes.push_back(meshNode);
+
+    // Attribute overrides. We assume instance mode all the time here.
+    if(args.linkOverride)
+    {
+    for(std::vector<std::string>::iterator it=args.overrides.begin(); it!=args.overrides.end(); ++it)
+    {
+      if(name.find(*it) != string::npos || std::find(tags.begin(), tags.end(), *it) != tags.end() || matchPattern(name,*it))
+      {
+        const Json::Value overrides = args.overrideRoot[*it];
+        if(overrides.size() > 0)
+        {
+          for( Json::ValueIterator itr = overrides.begin() ; itr != overrides.end() ; itr++ ) 
+          {
+            std::string attribute = itr.key().asString();
+            AiMsgDebug("[ABC] Checking attribute %s for shape %s", attribute.c_str(), name.c_str());
+
+            if (attribute=="smoothing" 
+              || attribute=="opaque" 
+              || attribute=="subdiv_iterations" 
+              || attribute=="subdiv_type"
+              || attribute=="subdiv_adaptive_metric"
+              || attribute=="subdiv_uv_smoothing"
+              || attribute=="subdiv_pixel_error"
+              || attribute=="disp_height"
+              || attribute=="disp_padding"
+              || attribute=="disp_zero_value"
+              || attribute=="disp_autobump"
+              || attribute=="invert_normals")
+            {
+              // check if the attribute exists ...
+              const AtNodeEntry* nodeEntry = AiNodeGetNodeEntry(meshNode);
+              const AtParamEntry* paramEntry = AiNodeEntryLookUpParameter(nodeEntry, attribute.c_str());
+
+              if ( paramEntry != NULL)
               {
-                std::string attribute = itr.key().asString();
-                AiMsgDebug("[ABC] Checking attribute %s for shape %s", attribute.c_str(), name.c_str());
-
-                if (attribute=="smoothing" 
-                  || attribute=="opaque" 
-                  || attribute=="subdiv_iterations" 
-                  || attribute=="subdiv_type"
-                  || attribute=="subdiv_adaptive_metric"
-                  || attribute=="subdiv_uv_smoothing"
-                  || attribute=="subdiv_pixel_error"
-                  || attribute=="disp_height"
-                  || attribute=="disp_padding"
-                  || attribute=="disp_zero_value"
-                  || attribute=="disp_autobump"
-                  || attribute=="invert_normals")
+                AiMsgDebug("[ABC] attribute %s exists on shape", attribute.c_str());
+                Json::Value val = args.overrideRoot[*it][itr.key().asString()];
+                if( val.isString() ) 
+                  AiNodeSetStr(meshNode, attribute.c_str(), val.asCString());
+                else if( val.isBool() ) 
+                  AiNodeSetBool(meshNode, attribute.c_str(), val.asBool());
+                else if( val.isInt() ) 
                 {
-                  // check if the attribute exists ...
-                  const AtNodeEntry* nodeEntry = AiNodeGetNodeEntry(meshNode);
-                  const AtParamEntry* paramEntry = AiNodeEntryLookUpParameter(nodeEntry, attribute.c_str());
-
-                  if ( paramEntry != NULL)
-                  {
-                    AiMsgDebug("[ABC] attribute %s exists on shape", attribute.c_str());
-                    Json::Value val = args.overrideRoot[*it][itr.key().asString()];
-                    if( val.isString() ) 
-                      AiNodeSetStr(meshNode, attribute.c_str(), val.asCString());
-                    else if( val.isBool() ) 
-                      AiNodeSetBool(meshNode, attribute.c_str(), val.asBool());
-                    else if( val.isInt() ) 
-                    {
-                      //make the difference between Byte & int!
-                      int typeEntry = AiParamGetType(paramEntry);
-                      if(typeEntry == AI_TYPE_BYTE)
-                        AiNodeSetByte(meshNode, attribute.c_str(), val.asInt());
-                      else 
-                        AiNodeSetInt(meshNode, attribute.c_str(), val.asInt());
-                    }
-                    else if( val.isUInt() ) 
-                      AiNodeSetUInt(meshNode, attribute.c_str(), val.asUInt());
-                    else if( val.isDouble() ) 
-                      AiNodeSetFlt(meshNode, attribute.c_str(), val.asDouble());
-                  }
+                  //make the difference between Byte & int!
+                  int typeEntry = AiParamGetType(paramEntry);
+                  if(typeEntry == AI_TYPE_BYTE)
+                    AiNodeSetByte(meshNode, attribute.c_str(), val.asInt());
+                  else 
+                    AiNodeSetInt(meshNode, attribute.c_str(), val.asInt());
                 }
+                else if( val.isUInt() ) 
+                  AiNodeSetUInt(meshNode, attribute.c_str(), val.asUInt());
+                else if( val.isDouble() ) 
+                  AiNodeSetFlt(meshNode, attribute.c_str(), val.asDouble());
               }
             }
           }
         }
       }
+    }
+    }
 
-      // displaces assignation
+    // displaces assignation
 
-      if(appliedDisplacement!= NULL)
-        AiNodeSetPtr(meshNode, "disp_map", appliedDisplacement);
+    if(appliedDisplacement!= NULL)
+    AiNodeSetPtr(meshNode, "disp_map", appliedDisplacement);
 
-      if ( instanceNode != NULL)
+    if ( instanceNode != NULL)
+    {
+      AiNodeSetStr( meshNode, "name", (name + ":src").c_str() );
+    }
+    else
+    {
+      AiNodeSetStr( meshNode, "name", name.c_str() );
+    }
+
+    AiNodeSetArray(meshNode, "vidxs",
+          AiArrayConvert(vidxs.size(), 1, AI_TYPE_UINT,
+                  (void*)&vidxs[0]));
+
+    AiNodeSetArray(meshNode, "nsides",
+          AiArrayConvert(nsides.size(), 1, AI_TYPE_BYTE,
+                  &(nsides[0])));
+
+    AiNodeSetArray(meshNode, "vlist",
+          AiArrayConvert( vlist.size() / sampleTimes.size(),
+                  sampleTimes.size(), AI_TYPE_FLOAT, (void*)(&(vlist[0]))));
+
+    if ( !uvlist.empty() )
+    {
+     AiMsgDebug( "[ABC] Flipping in V %s",args.flipv ? "true" : "false"); 
+     if (args.flipv)
+     {
+
+        for (size_t i = 1, e = uvlist.size(); i < e; i += 2)
+        {
+          uvlist[i] = 1.0 - uvlist[i];
+        }            
+     }
+
+     AiMsgDebug( "[ABC] assigning UVs %s",name.c_str()); 
+
+     // realocate the uvs to a AiArrayFlt array
+
+     AtArray* a_uvlist = AiArrayAllocate( uvlist.size() , 1, AI_TYPE_FLOAT);
+
+     for (unsigned int i = 0; i < uvlist.size() ; ++i)
+     {
+      AiArraySetFlt(a_uvlist, i, uvlist[i]);
+     }
+
+     AiNodeSetArray(meshNode, "uvlist", a_uvlist);
+
+     if ( !uvidxs.empty() )
+     {
+       // we must invert the idxs
+
+       unsigned int facePointIndex = 0;
+       unsigned int base = 0;
+
+       AtArray* uvidxReversed = AiArrayAllocate(uvidxs.size(), 1, AI_TYPE_UINT);
+
+            //AiMsgInfo("sampleTimes.size() %i", sampleTimes.size());
+
+       for (unsigned int i = 0; i < nsides.size() ; ++i)
+       {
+          int curNum = nsides[i];
+          for (int j = 0; j < curNum; ++j, ++facePointIndex)
+             AiArraySetUInt(uvidxReversed, facePointIndex, uvidxs[base+curNum-j-1]);
+
+
+          base += curNum;
+       }
+
+        AiNodeSetArray(meshNode, "uvidxs",
+              uvidxReversed);
+     }
+     else
+     {
+       AiNodeSetArray(meshNode, "uvidxs",
+               AiArrayConvert(vidxs.size(), 1, AI_TYPE_UINT,
+                       &(vidxs[0])));
+     }
+    }
+
+    if ( sampleTimes.size() > 1 )
+    {
+      std::vector<float> relativeSampleTimes;
+      relativeSampleTimes.reserve( sampleTimes.size() );
+
+      for (SampleTimeSet::const_iterator I = sampleTimes.begin();
+              I != sampleTimes.end(); ++I )
       {
-          AiNodeSetStr( meshNode, "name", (name + ":src").c_str() );
-      }
-      else
-      {
-          AiNodeSetStr( meshNode, "name", name.c_str() );
-      }
+          relativeSampleTimes.push_back(
+                  GetRelativeSampleTime( args, (*I) ) );
 
-      AiNodeSetArray(meshNode, "vidxs",
-              AiArrayConvert(vidxs.size(), 1, AI_TYPE_UINT,
-                      (void*)&vidxs[0]));
-
-      AiNodeSetArray(meshNode, "nsides",
-              AiArrayConvert(nsides.size(), 1, AI_TYPE_BYTE,
-                      &(nsides[0])));
-
-      AiNodeSetArray(meshNode, "vlist",
-              AiArrayConvert( vlist.size() / sampleTimes.size(),
-                      sampleTimes.size(), AI_TYPE_FLOAT, (void*)(&(vlist[0]))));
-
-      if ( !uvlist.empty() )
-      {
-         AiMsgDebug( "[ABC] Flipping in V %s",args.flipv ? "true" : "false"); 
-         if (args.flipv)
-         {
-
-            for (size_t i = 1, e = uvlist.size(); i < e; i += 2)
-            {
-              uvlist[i] = 1.0 - uvlist[i];
-            }            
-         }
-
-         AiMsgDebug( "[ABC] assigning UVs %s",name.c_str()); 
-
-         // realocate the uvs to a AiArrayFlt array
-
-         AtArray* a_uvlist = AiArrayAllocate( uvlist.size() , 1, AI_TYPE_FLOAT);
-
-         for (unsigned int i = 0; i < uvlist.size() ; ++i)
-         {
-          AiArraySetFlt(a_uvlist, i, uvlist[i]);
-         }
-
-         AiNodeSetArray(meshNode, "uvlist", a_uvlist);
-
-         if ( !uvidxs.empty() )
-         {
-           // we must invert the idxs
-
-           unsigned int facePointIndex = 0;
-           unsigned int base = 0;
-
-           AtArray* uvidxReversed = AiArrayAllocate(uvidxs.size(), 1, AI_TYPE_UINT);
-
-                //AiMsgInfo("sampleTimes.size() %i", sampleTimes.size());
-
-           for (unsigned int i = 0; i < nsides.size() ; ++i)
-           {
-              int curNum = nsides[i];
-              for (int j = 0; j < curNum; ++j, ++facePointIndex)
-                 AiArraySetUInt(uvidxReversed, facePointIndex, uvidxs[base+curNum-j-1]);
-
-
-              base += curNum;
-           }
-
-            AiNodeSetArray(meshNode, "uvidxs",
-                  uvidxReversed);
-         }
-         else
-         {
-           AiNodeSetArray(meshNode, "uvidxs",
-                   AiArrayConvert(vidxs.size(), 1, AI_TYPE_UINT,
-                           &(vidxs[0])));
-         }
-      }
-
-      if ( sampleTimes.size() > 1 )
-      {
-          std::vector<float> relativeSampleTimes;
-          relativeSampleTimes.reserve( sampleTimes.size() );
-
-          for (SampleTimeSet::const_iterator I = sampleTimes.begin();
-                  I != sampleTimes.end(); ++I )
-          {
-              relativeSampleTimes.push_back(
-                      GetRelativeSampleTime( args, (*I) ) );
-
-          }
-
-          AiNodeSetArray( meshNode, "deform_time_samples",
-                  AiArrayConvert(relativeSampleTimes.size(), 1,
-                          AI_TYPE_FLOAT, &relativeSampleTimes[0]));
       }
 
-      // faceset visibility array
-      if ( !facesetName.empty() )
+      AiNodeSetArray( meshNode, "deform_time_samples",
+              AiArrayConvert(relativeSampleTimes.size(), 1,
+                      AI_TYPE_FLOAT, &relativeSampleTimes[0]));
+    }
+    else if(numSampleTimes == 2)
+    {
+        AiNodeSetArray( meshNode, "deform_time_samples",
+                AiArray(2, 1, AI_TYPE_FLOAT, 0.f, 1.f));
+    }
+
+    // faceset visibility array
+    if ( !facesetName.empty() )
+    {
+      if ( ps.hasFaceSet( facesetName ) )
       {
-          if ( ps.hasFaceSet( facesetName ) )
-          {
-              ISampleSelector frameSelector( *singleSampleTimes.begin() );
-
-
-              IFaceSet faceSet = ps.getFaceSet( facesetName );
-              IFaceSetSchema::Sample faceSetSample =
-                      faceSet.getSchema().getValue( frameSelector );
-
-              std::set<int> facesToKeep;
-
-
-              facesToKeep.insert( faceSetSample.getFaces()->get(),
-                      faceSetSample.getFaces()->get() +
-                              faceSetSample.getFaces()->size() );
-
-              std::vector<bool> faceVisArray;
-              faceVisArray.reserve( nsides.size() );
-
-              for ( int i = 0; i < (int) nsides.size(); ++i )
-              {
-                  faceVisArray.push_back(
-                          facesToKeep.find( i ) != facesToKeep.end() );
-              }
-
-              if ( AiNodeDeclare( meshNode, "face_visibility", "uniform BOOL" ) )
-              {
-                  AiNodeSetArray( meshNode, "face_visibility",
-                          AiArrayConvert( faceVisArray.size(), 1, AI_TYPE_BOOLEAN,
-                                  (void *) &faceVisArray[0] ) );
-              }
-          }
-      }
-
-      {
-          ICompoundProperty arbGeomParams = ps.getArbGeomParams();
           ISampleSelector frameSelector( *singleSampleTimes.begin() );
 
-          /* add user attributs to the current object */
-          AddArbitraryGeomParams( arbGeomParams, frameSelector, meshNode );
-      }
 
-      // AiNodeSetBool( meshNode, "smoothing", true ); // disbled to allow the mesh to have hard edges
+          IFaceSet faceSet = ps.getFaceSet( facesetName );
+          IFaceSetSchema::Sample faceSetSample =
+                  faceSet.getSchema().getValue( frameSelector );
 
-      if (subdiv_iterations > 0)
-        {
-
-          AiNodeSetStr( meshNode, "subdiv_type", "catclark" );
-          AiNodeSetInt( meshNode, "subdiv_iterations", args.subdIterations );
-          AiNodeSetStr( meshNode, "subdiv_uv_smoothing", args.subdUVSmoothing.c_str() );
-        }
+          std::set<int> facesToKeep;
 
 
-      // add as switch
-      if ( args.invertNormals )
-      {
-       AiNodeSetBool( meshNode, "invert_normals", args.invertNormals );
-      }
+          facesToKeep.insert( faceSetSample.getFaces()->get(),
+                  faceSetSample.getFaces()->get() +
+                          faceSetSample.getFaces()->size() );
 
-      if ( args.disp_map != "" )
-      {
-          AtNode* disp_node = AiNodeLookUpByName(args.disp_map.c_str());
-          AiNodeSetPtr( meshNode, "disp_map", disp_node );
-      }
+          std::vector<bool> faceVisArray;
+          faceVisArray.reserve( nsides.size() );
 
-      if ( instanceNode == NULL )
-      {
-          if ( xformSamples )
+          for ( int i = 0; i < (int) nsides.size(); ++i )
           {
-              ApplyTransformation( meshNode, xformSamples, args );
+              faceVisArray.push_back(
+                      facesToKeep.find( i ) != facesToKeep.end() );
           }
 
-          return meshNode;
+          if ( AiNodeDeclare( meshNode, "face_visibility", "uniform BOOL" ) )
+          {
+              AiNodeSetArray( meshNode, "face_visibility",
+                      AiArrayConvert( faceVisArray.size(), 1, AI_TYPE_BOOLEAN,
+                              (void *) &faceVisArray[0] ) );
+          }
       }
-      else
+    }
+
+    {
+        ICompoundProperty arbGeomParams = ps.getArbGeomParams();
+        ISampleSelector frameSelector( *singleSampleTimes.begin() );
+
+        /* add user attributs to the current object */
+        AddArbitraryGeomParams( arbGeomParams, frameSelector, meshNode );
+    }
+
+    // AiNodeSetBool( meshNode, "smoothing", true ); // disbled to allow the mesh to have hard edges
+
+    if (subdiv_iterations > 0)
+    {
+        AiNodeSetStr( meshNode, "subdiv_type", "catclark" );
+        AiNodeSetInt( meshNode, "subdiv_iterations", args.subdIterations );
+        AiNodeSetStr( meshNode, "subdiv_uv_smoothing", args.subdUVSmoothing.c_str() );
+    }
+
+
+    // add as switch
+    if ( args.invertNormals )
+    {
+        AiNodeSetBool( meshNode, "invert_normals", args.invertNormals );
+    }
+
+    if ( args.disp_map != "" )
+    {
+        AtNode* disp_node = AiNodeLookUpByName(args.disp_map.c_str());
+        AiNodeSetPtr( meshNode, "disp_map", disp_node );
+    }
+
+    if ( instanceNode == NULL )
+    {
+      if ( xformSamples )
       {
-          AiNodeSetByte( meshNode, "visibility", 0 ); // had original node that is being referenced
-
-          AiNodeSetPtr(instanceNode, "node", meshNode );
-          g_meshCache[cacheId] = meshNode;
-          return meshNode;
-
+          ApplyTransformation( meshNode, xformSamples, args );
       }
+
+      return meshNode;
+    }
+    else
+    {
+      AiNodeSetByte( meshNode, "visibility", 0 ); // had original node that is being referenced
+
+      AiNodeSetPtr(instanceNode, "node", meshNode );
+      g_meshCache[cacheId] = meshNode;
+      return meshNode;
+
+    }
     // }
     
 }
@@ -1216,6 +817,7 @@ void ProcessPolyMesh( IPolyMesh &polymesh, ProcArgs &args,
     std::vector<unsigned int> nidxs;
 
     // AiNodeSetBool(meshNode, "smoothing", true); // Disabled for now so meshes can have hard edges
+
     //TODO: better check
     if (AiNodeGetArray(meshNode, "vlist")->nkeys == sampleTimes.size())
     {
@@ -1228,6 +830,7 @@ void ProcessPolyMesh( IPolyMesh &polymesh, ProcArgs &args,
     
     }
 
+    // check that the meshNode has normals and is not  a 
     if ( !nlist.empty() && AiNodeGetStr(meshNode, "subdiv_type") == "none" )
     {
         AiNodeSetArray(meshNode, "nlist",
@@ -1261,41 +864,6 @@ void ProcessPolyMesh( IPolyMesh &polymesh, ProcArgs &args,
                             &(vidxs[0])));
         }
     }
-
-    // if ( !nlist.empty() )
-    // {
-    //     AiNodeSetArray(meshNode, "nlist",
-    //         AiArrayConvert( nlist.size() / sampleTimes.size(),
-    //                 sampleTimes.size(), AI_TYPE_FLOAT, (void*)(&(nlist[0]))));
-
-    //     if ( !nidxs.empty() )
-    //     {
-
-    //        // we must invert the idxs
-    //        //unsigned int facePointIndex = 0;
-    //        unsigned int base = 0;
-    //        AtArray* nsides = AiNodeGetArray(meshNode, "nsides");
-    //        std::vector<unsigned int> nvidxReversed;
-    //        for (unsigned int i = 0; i < nsides->nelements / nsides->nkeys; ++i)
-    //        {
-    //           int curNum = AiArrayGetUInt(nsides ,i);
-              
-    //           for (int j = 0; j < curNum; ++j)
-    //           {
-    //               nvidxReversed.push_back(nidxs[base+curNum-j-1]);
-    //           }
-    //           base += curNum;
-    //        }
-    //         AiNodeSetArray(meshNode, "nidxs", AiArrayConvert(nvidxReversed.size(), 1, AI_TYPE_UINT, (void*)&nvidxReversed[0]));
-    //     }
-    //     else
-    //     {
-    //         AiNodeSetArray(meshNode, "nidxs",
-    //                 AiArrayConvert(vidxs.size(), 1, AI_TYPE_UINT,
-    //                         &(vidxs[0])));
-    //     }
-    // }
-
 }
 
 //-*************************************************************************
@@ -1320,29 +888,3 @@ void ProcessSubD( ISubD &subd, ProcArgs &args,
     AiNodeSetStr( meshNode, "subdiv_type", "catclark" ); // quick override
 
 }
-
-
-void ProcessPoints( IPoints &points, ProcArgs &args)
-{
-    SampleTimeSet sampleTimes;
-    std::vector<AtUInt32> pts;
-        
-    // This is a valid condition for the second instance onward and just
-    // means that we don't need to do anything further.
-    
-    return;
-}
-
-
-
-void ProcessCurves( IPoints &points, ProcArgs &args)
-{
-    SampleTimeSet sampleTimes;
-    std::vector<AtUInt32> pts;
-        
-    // This is a valid condition for the second instance onward and just
-    // means that we don't need to do anything further.
-    
-    return;
-}
-

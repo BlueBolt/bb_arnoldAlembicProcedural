@@ -33,18 +33,19 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 //-*****************************************************************************
-#ifndef _Alembic_Prman_PathUtil_h_
-#define _Alembic_Prman_PathUtil_h_
-
+#ifndef _Alembic_Arnold_WritePoint_h_
+#define _Alembic_Arnold_WritePoint_h_
 
 #include <Alembic/AbcGeom/All.h>
 
-typedef std::vector<std::string> PathList;
+#include "ProcArgs.h"
+#include "SampleUtil.h"
 
-void TokenizePath( const std::string &path, PathList &result );
-std::string replace_all(const std::string &str, const char *from, const char *to);
-static std::string translate(const char *pattern);
-bool matchPattern(std::string str, std::string pat);
+using namespace Alembic::AbcGeom;
+//-*****************************************************************************
 
+
+void ProcessPoint( IPoints &points, ProcArgs &args,
+        MatrixSampleMap * xformSamples);
 
 #endif

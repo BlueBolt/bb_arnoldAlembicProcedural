@@ -35,7 +35,10 @@
 //-*****************************************************************************
 #include "PathUtil.h"
 
+#include <algorithm> 
+
 #include <boost/tokenizer.hpp> // TODO replace with pystring method
+#include <boost/regex.hpp>
 
 //-*****************************************************************************
 void TokenizePath( const std::string &path, std::vector<std::string> &result )
@@ -52,4 +55,94 @@ void TokenizePath( const std::string &path, std::vector<std::string> &result )
 
         result.push_back( *iter );
     }
+}
+
+/*
+ * Return a new string with all occurrences of 'from' replaced with 'to'
+ */
+std::string replace_all(const std::string &str, const char *from, const char *to)
+{
+    std::string result(str);
+    std::string::size_type
+        index = 0,
+        from_len = strlen(from),
+        to_len = strlen(to);
+    while ((index = result.find(from, index)) != std::string::npos) {
+        result.replace(index, from_len, to);
+        index += to_len;
+    }
+    return result;
+}
+
+/*
+ * Translate a shell pattern into a regular expression
+ * This is a direct translation of the algorithm defined in fnmatch.py.
+ */
+static std::string translate(const char *pattern)
+{
+    int i = 0, n = strlen(pattern);
+    std::string result;
+ 
+    while (i < n) {
+        char c = pattern[i];
+        ++i;
+ 
+        if (c == '*') {
+            result += ".*";
+        } else if (c == '?') {
+            result += '.';
+        } else if (c == '[') {
+            int j = i;
+            /*
+             * The following two statements check if the sequence we stumbled
+             * upon is '[]' or '[!]' because those are not valid character
+             * classes.
+             */
+            if (j < n && pattern[j] == '!')
+                ++j;
+            if (j < n && pattern[j] == ']')
+                ++j;
+            /*
+             * Look for the closing ']' right off the bat. If one is not found,
+             * escape the opening '[' and continue.  If it is found, process
+             * the contents of '[...]'.
+             */
+            while (j < n && pattern[j] != ']')
+                ++j;
+            if (j >= n) {
+                result += "\\[";
+            } else {
+                std::string stuff = replace_all(std::string(&pattern[i], j - i), "\\", "\\\\");
+                char first_char = pattern[i];
+                i = j + 1;
+                result += "[";
+                if (first_char == '!') {
+                    result += "^" + stuff.substr(1);
+                } else if (first_char == '^') {
+                    result += "\\" + stuff;
+                } else {
+                    result += stuff;
+                }
+                result += "]";
+            }
+        } else {
+            if (isalnum(c)) {
+                result += c;
+            } else {
+                result += "\\";
+                result += c;
+            }
+        }
+    }
+    /*
+     * Make the expression multi-line and make the dot match any character at all.
+     */
+    return result + "\\Z(?ms)";
+}
+ 
+bool matchPattern(std::string str, std::string pat)
+{
+    boost::regex rx (translate(pat.c_str()).c_str());
+    bool result = boost::regex_search(str,rx);
+    return result;
 }
