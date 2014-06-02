@@ -333,5 +333,80 @@ void ProcArgs::usage()
     
     std::cerr << std::endl;
 
-    
+ 
+    std::cerr <<  "======="
+                  ""
+                  "User Properties"
+                  ""
+                  "======="
+                  ""
+                  "There are key user attributes that can be added to the procedural"
+                  "that affect the contense of the generated geometry:"
+                  ""
+                  "The procedural will detect various custom user attributes as" 
+                  "json dictionaries."
+                  "Where ever a target node is given it can be given as a alembic"
+                  "object path (\"/root/path/to/object\"), a wildcard regualr expression"
+                  "(\"*match*\"),or a key of an exported geometry constant \"tag\""
+                  "attribute with key:value pairs.";
+
+    std::cerr << std::endl;
+
+
+    std::cerr <<   "* overrides <string>"
+                   "* overridesfile <string>"
+                   ""
+                   "This is either a JSON dictionary containgin key, dictionary pairs :"
+                   ""
+                   "{\"target\":{\"attr\":value}}" 
+                   ""
+                   "or a path to a file containig key:dictionary pairs with in a larger"
+                   "dictionary key named \"overrides\"." 
+                   ""
+                   "{\"overrides\":{\"target\":{\"attr\":value}}}"
+                   ""
+                   "These attriubtes need to match the available attreributes for the"
+                   "type of geometry that you are overiddeing. To find the aproppriate"
+                   "attributes use kicks info tools e.g. kick -info polymesh will give"
+                   "the attributes available on a polymesh. In addition to these attributes"
+                   "you can also use a \"matte\" boolean attribute; set it to true and"
+                   "the procedural will add a usr attribute called \"enable_matte\" to"
+                   "the target object(s)" ;
+
+    std::cerr << std::endl;
+
+    std::cerr <<   "* userAttributes <string>"
+                   "* userAttributesfile <string>"
+                   ""
+                   "These attributes are simaler to the overrides, however they only add user"
+                   "attributes, usefull for linking to procedural shader operations and using for"
+                   "userdata operations."
+                   ""
+                   "{\"userAttributes\":{\"target\":{\"attr\":value}}}";
+
+    std::cerr << std::endl;
+
+    std::cerr <<   "* shaderAssignation <string>"
+                   "* displacementAssignation <string>"
+                   "* shaderAssignationfile <string>"
+                   ""
+                   "Shader and displacement assignment is done from a shader:list pattern, so you"
+                   "can choose a shader and assign it to multiple objects within the heirarchy:"
+                   ""
+                   "{\"shaderName\":[\"/path/to/object\",\"*match*\",\"tag\"]}"
+                   ""
+                   "They can also be assigned using a JSON file under the two keys \"shaders\""
+                   "and \"displacement\"";
+
+    std::cerr << std::endl;
+
+    std::cerr <<   "* assShaders <string>"
+                   ""
+                   "This is the optional path to a ass file containig shaders that you wish to load"
+                   "in to arnold, these shaders may be ones you a referenceing to in the shaders"
+                   "attribute above.";
+
+    std::cerr << std::endl;
+
+
 }

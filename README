@@ -38,12 +38,59 @@ Because node names are unique scene-wide in arnold, this allows you control pote
 
 This behavior is disabled by default. If enabled, the procedural will attempt to identify identical primitives (using Alembic's per-array-property hash keys) and create corresponding "ginstance" nodes. Two primitives are considered equivalent if the keys of their relevant point position samples match along with any specified subdivision values. This works across multiple archives or invokations of the procedural. It currently does not write unique user data per instance but will likely do so automatically (when necessary) in a future release. The ray visibility of the source primitive will be set to AI_RAY_NONE and the "ginstance" node's will be set to that of the calling "procedural" node.
 
+
+=======
+
+User Properties
+
+=======
+
+There are key user attributes that can be added to the procedural that affect the contense of the generated geometry:
+
+The procedural will detect various custom user attributes as json dictionaries. where ever a target node is given it can be given as a alembic object path ("/root/path/to/object"), a wildcard regualr expression ("*match*"), or a key of an exported geometry constant "tag" attribute with key:value pairs.
+
+ * overrides <string>
+ * overridesfile <string>
+
+ This is either a JSON dictionary containgin key, dictionary pairs :
+
+ {"target":{"attr":value}} 
+
+ or  a path to a file containig key:dictionary pairs with in a larger dictionary key named "overrides". 
+
+ {"overrides":{"target":{"attr":value}}}
+
+ These attriubtes need to match the available attreributes for the tyope of geometry that you are overiddeing. To find the aproppriate attributes use kicjs info tools e.g. kick -info polymesh will give the attributes available on a polymesh. In addition to these attributes you can also use a "matte" boolean attribute and set it to true and the procedural will add a usr attribute called "enable_matte" to the target object(s) 
+
+ * userAttributes <string>
+ * userAttributesfile <string>
+
+ These attributes are simaler to the opverrides, however they only add user attributes, usefull for linking to procedural shader operations and using for userdata operations.
+
+
+ {"userAttributes":{"target":{"attr":value}}}
+
+ * shaderAssignation <string>
+ * displacementAssignation <string>
+ * shaderAssignationfile <string>
+
+ Shader and displacement assignment is done from a shader:list pattern, so you can choose a shader and assign it to multiple objects within the heirarchy:
+
+ {"shaderName":["/path/to/object","*match*","tag"]}
+
+ they can also be assigned using a JSON file under the two keys "shaders" and "displacement"
+
+ * assShaders <string>
+
+ Thisn is the optional path to a ass file containig shaders that you wish to load in to arnold, these shaders may be ones you a referenceing to in the shaders attribute above.
+
+
 STILL TO DO:
--AbcGeom::IPoints
 -AbcGeom::ICurves
 -AbcGeom::INuPatch
 -AbcGeom::ICamera
--automatic recognition of unique user data per-instance
+
+
 
 
 
