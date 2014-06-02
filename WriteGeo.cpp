@@ -213,7 +213,6 @@ AtNode * ProcessPolyMeshBase(
     std::vector<std::string> tags;
 
     // get tags
-    // TODO get any mtoa_attributes and convert them to user attributes 
     if ( arbGeomParams != NULL && arbGeomParams.valid() )
     {
       if (arbGeomParams.getPropertyHeader("mtoa_constant_tags") != NULL)
