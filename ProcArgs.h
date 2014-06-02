@@ -99,6 +99,7 @@ struct ProcArgs
     bool linkShader;
     bool linkDisplacement;
     bool linkOverride;
+    bool linkUserAttributes;
     
     std::string subdUVSmoothing;
     std::string disp_map;
@@ -107,8 +108,9 @@ struct ProcArgs
     std::map<std::string, AtNode*> shaders;
     std::map<std::string, AtNode*> displacements;
     std::vector<std::string> overrides;
-    Json::Value overrideRoot;
-    
+    std::vector<std::string> userAttributes;
+    Json::Value overrideRoot;    
+    Json::Value userAttributesRoot;    
     
     void usage();
 };

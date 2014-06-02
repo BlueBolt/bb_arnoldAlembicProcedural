@@ -60,6 +60,7 @@ ProcArgs::ProcArgs( const char * paramStr )
   , linkShader(false)
   , linkDisplacement(false)
   , linkOverride(false)
+  , linkUserAttributes(false)
 {    
     // Grab the shutter a camera attached to AiUniverse if present
 
@@ -215,7 +216,7 @@ ProcArgs::ProcArgs( const char * paramStr )
 
 void ProcArgs::usage()
 {
-    std::cerr << "AlembicArnoldProcedural 0.8.2 usage:" << std::endl;
+    std::cerr << "bb_AlembicArnoldProcedural 0.9.0 usage:" << std::endl;
     std::cerr << std::endl;
     
     

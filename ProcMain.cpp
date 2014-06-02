@@ -40,7 +40,7 @@
 #include "PathUtil.h"
 #include "SampleUtil.h"
 #include "WriteGeo.h"
-#include "Overrides.h"
+#include "WritePoint.h"
 #include "json/json.h"
 #include "pystring.h"
 
@@ -48,6 +48,10 @@
 #include <Alembic/AbcCoreHDF5/All.h>
 #include <Alembic/AbcCoreOgawa/All.h>
 #include <Alembic/AbcCoreFactory/All.h>
+
+#include <boost/tokenizer.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/thread.hpp>
 
 #include <vector>
 #include <iostream>
@@ -60,6 +64,11 @@ namespace
 using namespace Alembic::Abc;
 using namespace Alembic::AbcGeom;
 using namespace Alembic::AbcCoreFactory;
+
+typedef boost::shared_mutex Lock;
+typedef boost::unique_lock< Lock > WriteLock;
+typedef boost::shared_lock< Lock > ReadLock;
+Lock myLock;
 
 typedef std::map<std::string, IObject> FileCache;
 FileCache g_fileCache;
@@ -204,7 +213,7 @@ void WalkObject( IObject parent, const ObjectHeader &ohead, ProcArgs &args,
     else if ( IPoints::matches( ohead ) )
     {
         IPoints points( parent, ohead.getName() );
-        // TODO ProcessPoints( points, args );
+        ProcessPoint( points, args, xformSamples );
         
         nextParentObject = points;
     }
@@ -255,9 +264,6 @@ void WalkObject( IObject parent, const ObjectHeader &ohead, ProcArgs &args,
             }
         }
     }
-    
-    
-    
 }
 
 //-*************************************************************************
@@ -287,7 +293,10 @@ int ProcInit( struct AtNode *node, void **user_ptr )
         return 1;
     } 
 
-    /* Load shaders file*/
+    /* Load shaders file */
+    // FIXME: is there a way of renaming the nodes from this load?
+    //        if not maybe we should look in to having the shaders be in an abc file instead
+    WriteLock w_lock(myLock);
     if (AiNodeLookUpUserParameter(node, "assShaders") !=NULL )
     {
         const char* assfile = AiNodeGetStr(node, "assShaders");
@@ -298,16 +307,16 @@ int ProcInit( struct AtNode *node, void **user_ptr )
             {
                 if(AiASSLoad(assfile, AI_NODE_SHADER) == 0)
                     g_loadedAss.push_back(std::string(assfile));
-
-            }
-            
+            }            
         }
     }
+    w_lock.unlock();
 
     bool skipJson = false;
     bool skipShaders = false;
     bool skipOverrides = false;
     bool skipDisplacement = false;
+    bool skipUserAttributes = false;
     if (AiNodeLookUpUserParameter(node, "skipJson") !=NULL )
         skipJson = AiNodeGetBool(node, "skipJson");
     if (AiNodeLookUpUserParameter(node, "skipShaders") !=NULL )
@@ -316,14 +325,17 @@ int ProcInit( struct AtNode *node, void **user_ptr )
         skipOverrides = AiNodeGetBool(node, "skipOverrides");
     if (AiNodeLookUpUserParameter(node, "skipDisplacements") !=NULL )
         skipDisplacement = AiNodeGetBool(node, "skipDisplacements");
+    if (AiNodeLookUpUserParameter(node, "skipUserAttributes") !=NULL )
+        skipUserAttributes = AiNodeGetBool(node, "skipUserAttributes");
     
 
     Json::Value jrootShaders;
     Json::Value jrootOverrides;
     Json::Value jrootDisplacements;
+    Json::Value jrootUserAttributes;
     bool parsingSuccessful = false;
 
-    // Load attribute overides if there is a attribute present pointing to an overrides file
+    // Load attribute overrides if there is a attribute present pointing to an overrides file
     if (AiNodeLookUpUserParameter(node, "overridefile") !=NULL && skipJson == false)
     {
         Json::Value jroot;
@@ -361,6 +373,40 @@ int ProcInit( struct AtNode *node, void **user_ptr )
         }
     }
 
+    // Load attribute overrides if there is a attribute present pointing to an overrides file
+    if (AiNodeLookUpUserParameter(node, "userAttributesfile") !=NULL && skipJson == false)
+    {
+        Json::Value jroot;
+        Json::Reader reader;
+        std::ifstream test(AiNodeGetStr(node, "userAttributesfile"), std::ifstream::binary);
+        parsingSuccessful = reader.parse( test, jroot, false );
+        if ( parsingSuccessful )
+        {
+            /* OVERRIDES */
+            if(skipOverrides == false)
+            {
+                jrootUserAttributes = jroot["userAttributes"];
+                if (AiNodeLookUpUserParameter(node, "userAttributes") !=NULL)
+                {
+                    Json::Reader readerOverride;
+                    Json::Value jrootUserAttributesOverrides;
+
+                    if(readerOverride.parse( AiNodeGetStr(node, "userAttributes"), jrootUserAttributesOverrides))
+                    {
+                        for( Json::ValueIterator itr = jrootUserAttributesOverrides.begin() ; itr != jrootUserAttributesOverrides.end() ; itr++ ) 
+                        {
+                            const Json::Value paths = jrootUserAttributesOverrides[itr.key().asString()];
+                            for( Json::ValueIterator attrPath = paths.begin() ; attrPath != paths.end() ; attrPath++ ) 
+                            {
+                                Json::Value attr = paths[attrPath.key().asString()];
+                                jrootUserAttributes[itr.key().asString()][attrPath.key().asString()] = attr;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     // Load shader assignments if there is a attribute present pointing to an shader assignments file
     if (AiNodeLookUpUserParameter(node, "shaderAssignmentfile") !=NULL && skipJson == false)
     {
@@ -494,6 +540,11 @@ int ProcInit( struct AtNode *node, void **user_ptr )
             Json::Reader reader;
             bool parsingSuccessful = reader.parse( AiNodeGetStr(node, "overrides"), jrootOverrides );
         }
+        if (AiNodeLookUpUserParameter(node, "userAttributes") !=NULL  && skipUserAttributes == false)
+        {
+            Json::Reader reader;
+            bool parsingSuccessful = reader.parse( AiNodeGetStr(node, "userAttributes"), jrootUserAttributes );
+        }
         if (AiNodeLookUpUserParameter(node, "shaderAssignation") !=NULL && skipShaders == false)
         {
             Json::Reader reader;
@@ -521,16 +572,14 @@ int ProcInit( struct AtNode *node, void **user_ptr )
                 AiMsgDebug( "[ABC] Searching displacement shader %s deeper underground...", itr.key().asCString()); 
                 // look for the same namespace for shaders...
                 std::vector<std::string> strs;
-                // boost::split(strs,args->nameprefix,boost::is_any_of(":"));
-                // do split based on ':'
-
-                // if(strs.size() > 1)
-                // {
-                //     strs.pop_back();
-                //     strs.push_back(itr.key().asString());
+                boost::split(strs,args->nameprefix,boost::is_any_of(":"));
+                if(strs.size() > 1)
+                {
+                    strs.pop_back();
+                    strs.push_back(itr.key().asString());
                         
-                //     shaderNode = AiNodeLookUpByName(boost::algorithm::join(strs, ":").c_str());
-                // }
+                    shaderNode = AiNodeLookUpByName(boost::algorithm::join(strs, ":").c_str());
+                }
             }
 
             if(shaderNode != NULL)
@@ -565,14 +614,14 @@ int ProcInit( struct AtNode *node, void **user_ptr )
                 AiMsgDebug( "[ABC] Searching shader %s deeper underground...", itr.key().asCString()); 
                 // look for the same namespace for shaders...
                 std::vector<std::string> strs;
-                // boost::split(strs,args->nameprefix,boost::is_any_of(":"));
-                // if(strs.size() > 1)
-                // {
-                //     strs.pop_back();
-                //     strs.push_back(itr.key().asString());
+                boost::split(strs,args->nameprefix,boost::is_any_of(":"));
+                if(strs.size() > 1)
+                {
+                    strs.pop_back();
+                    strs.push_back(itr.key().asString());
                         
-                //     shaderNode = AiNodeLookUpByName(boost::algorithm::join(strs, ":").c_str());
-                // }
+                    shaderNode = AiNodeLookUpByName(boost::algorithm::join(strs, ":").c_str());
+                }
             }
             if(shaderNode != NULL)
             {
@@ -591,7 +640,6 @@ int ProcInit( struct AtNode *node, void **user_ptr )
             }
         }
     }
-
             
     if( jrootOverrides.size() > 0 )
     {
@@ -605,10 +653,26 @@ int ProcInit( struct AtNode *node, void **user_ptr )
         }
         std::sort(args->overrides.begin(), args->overrides.end());
     }
+
+
+    if( jrootUserAttributes.size() > 0 )
+    {
+        args->linkUserAttributes = true;
+        args->userAttributesRoot = jrootUserAttributes;
+        for( Json::ValueIterator itr = jrootUserAttributes.begin() ; itr != jrootUserAttributes.end() ; itr++ ) 
+        {
+            std::string path = itr.key().asString();
+            args->userAttributes.push_back(path);
+
+        }
+        std::sort(args->userAttributes.begin(), args->userAttributes.end());
+    }
+
+    // Load the alembic file
+    
+    w_lock.lock();
     IObject root;
     
-    // Load the alembic file
-
     FileCache::iterator I = g_fileCache.find(args->filename);
     if (I != g_fileCache.end())
         root = (*I).second;
@@ -619,11 +683,11 @@ int ProcInit( struct AtNode *node, void **user_ptr )
         IArchive archive = factory.getArchive(args->filename); 
         if (!archive.valid())
         {
-            AiMsgError ( "Cannot read file %s", args->filename.c_str());
+            AiMsgWarning ( "[ABC] Cannot read file %s for node \"%s\"", args->filename.c_str(), AiNodeGetName(node));
         }
         else 
         {
-            AiMsgDebug ( "reading file %s", args->filename.c_str());
+            AiMsgDebug ( "[ABC] reading file %s", args->filename.c_str());
             g_fileCache[args->filename] = archive.getTop();
             root = archive.getTop();
         }
@@ -664,6 +728,7 @@ int ProcInit( struct AtNode *node, void **user_ptr )
     {
         AiMsgError("exception thrown");
     }
+    w_lock.unlock();
     return 1;
 }
 
@@ -680,9 +745,6 @@ int ProcCleanup( void *user_ptr )
 int ProcNumNodes( void *user_ptr )
 {
     ProcArgs * args = reinterpret_cast<ProcArgs*>( user_ptr );
-    const char* nodeName = AiNodeGetName(args->proceduralNode);
-    // AiMsgInfo("[bb_AlembicArnoldProcedural] number of nodes in %s: %d", nodeName,args->createdNodes.size());
-
     return (int) args->createdNodes.size();
 }
 
@@ -707,9 +769,11 @@ struct AtNode* ProcGetNode(void *user_ptr, int i)
 
 
 
+#ifdef __cplusplus
 extern "C"
 {
-    int ProcLoader(AtProcVtable* api)
+#endif
+    AI_EXPORT_LIB int ProcLoader(AtProcVtable *api)
     {
         api->Init        = ProcInit;
         api->Cleanup     = ProcCleanup;
@@ -718,4 +782,8 @@ extern "C"
         strcpy(api->version, AI_VERSION);
         return 1;
     }
+#ifdef __cplusplus
 }
+#endif
+
+

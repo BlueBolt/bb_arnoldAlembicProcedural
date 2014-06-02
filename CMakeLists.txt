@@ -43,6 +43,9 @@ SET( H_FILES
   ProcArgs.h
   SampleUtil.h
   WriteGeo.h
+  WritePoint.h
+  WriteTransform.h
+  WriteOverrides.h
   json/json.h
   pystring.h
   )
@@ -54,6 +57,9 @@ SET( CXX_FILES
   ProcMain.cpp
   SampleUtil.cpp
   WriteGeo.cpp
+  WritePoint.cpp
+  WriteTransform.cpp
+  WriteOverrides.cpp
   jsoncpp.cpp
   pystring.cpp
 )
@@ -79,6 +85,7 @@ TARGET_LINK_LIBRARIES( bb_AlembicArnoldProcedural
   ${ALEMBIC_HDF5_LIBS}
   ${ALEMBIC_ILMBASE_LIBS}
   ${Boost_REGEX_LIBRARY}
+  ${Boost_THREAD_LIBRARY}
   ${CMAKE_THREAD_LIBS_INIT}
   ${ZLIB_LIBRARIES}
 )
