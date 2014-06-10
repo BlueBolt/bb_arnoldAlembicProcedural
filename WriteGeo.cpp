@@ -775,6 +775,20 @@ AtNode * ProcessPolyMeshBase(
       {
           ApplyTransformation( meshNode, xformSamples, args );
       }
+              // shader assignation
+      if (nodeHasParameter( meshNode, "shader" ) )
+      {
+        if(args.linkShader)
+        {
+          ApplyShaders(name, meshNode, tags, args);
+        }
+        else
+        {
+          AtArray* shaders = AiNodeGetArray(args.proceduralNode, "shader");
+          if (shaders->nelements != 0)
+             AiNodeSetArray(meshNode, "shader", AiArrayCopy(shaders));
+        }
+      } // end shader assignment
 
       return meshNode;
     }
