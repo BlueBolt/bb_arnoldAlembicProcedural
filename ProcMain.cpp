@@ -91,7 +91,10 @@ void WalkObject( IObject parent, const ObjectHeader &ohead, ProcArgs &args,
     
     if ( IXform::matches( ohead ) )
     {
-        if ( args.excludeXform )
+        IObject child = IObject( parent, ohead.getName() );
+        if ( GetVisibility( child, ISampleSelector( args.frame / args.fps ) ) == kVisibilityHidden )
+        {}
+        else if ( args.excludeXform )
         {
             nextParentObject = IObject( parent, ohead.getName() );
         }
