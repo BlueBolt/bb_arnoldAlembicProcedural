@@ -41,6 +41,7 @@
 #include "SampleUtil.h"
 #include "WriteGeo.h"
 #include "WritePoint.h"
+#include "WriteCurves.h"
 #include "json/json.h"
 #include "pystring.h"
 
@@ -225,7 +226,7 @@ void WalkObject( IObject parent, const ObjectHeader &ohead, ProcArgs &args,
     else if ( ICurves::matches( ohead ) )
     {
         ICurves curves( parent, ohead.getName() );
-        // TODO ProcessCurves( curves, args );
+        ProcessCurves( curves, args, xformSamples );
         
         nextParentObject = curves;
     }
