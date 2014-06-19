@@ -77,6 +77,7 @@ struct ProcArgs
     
     std::string objectpath;
     std::string pattern;
+    std::string excludePattern;
 
     double frame;
     double frameOffset;

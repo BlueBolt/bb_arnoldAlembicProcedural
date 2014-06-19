@@ -201,6 +201,13 @@ AtNode * ProcessPolyMeshBase(
         return NULL;
     }
 
+    // check if this mesh matches the exclude pattern
+
+    if ( matchPattern(name,args.excludePattern) && args.excludePattern != "" )
+    {
+        return NULL;
+    }
+
     // do custom attributes and assignments
 
     std::string cacheId;

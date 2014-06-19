@@ -164,6 +164,20 @@ AtNode * ProcessPointsBase(
     
     std::string name = args.nameprefix + prim.getFullName();
     
+    // check if this meshes name matches the search pattern in the arguments
+
+    if ( !matchPattern(name,args.pattern) && args.pattern != "*" && args.pattern != "" )
+    {
+        return NULL;
+    }
+
+    // check if this mesh matches the exclude pattern
+
+    if ( matchPattern(name,args.excludePattern) && args.excludePattern != "" )
+    {
+        return NULL;
+    }
+
     AtNode * instanceNode = NULL;
     
     std::string cacheId;

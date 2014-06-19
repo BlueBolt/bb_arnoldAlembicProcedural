@@ -53,6 +53,7 @@ ProcArgs::ProcArgs( const char * paramStr )
   , subdIterations(0)
   , subdUVSmoothing("pin_corners")
   , pattern("*")
+  , excludePattern("")
   , disp_padding(-AI_BIG)
   , proceduralNode(0)
   , flipv(false)
@@ -159,6 +160,14 @@ ProcArgs::ProcArgs( const char * paramStr )
             if ( i < tokens.size() )
             {
                 pattern = tokens[i];
+            }
+        }
+        else if ( token == "-excludepattern" )
+        {
+            ++i;
+            if ( i < tokens.size() )
+            {
+                excludePattern = tokens[i];
             }
         }
         else if ( token == "-excludexform" )
