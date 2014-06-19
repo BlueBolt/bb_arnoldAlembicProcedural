@@ -44,6 +44,7 @@ SET( H_FILES
   SampleUtil.h
   WriteGeo.h
   WritePoint.h
+  WriteCurves.h
   WriteTransform.h
   WriteOverrides.h
   json/json.h
@@ -58,6 +59,7 @@ SET( CXX_FILES
   SampleUtil.cpp
   WriteGeo.cpp
   WritePoint.cpp
+  WriteCurves.cpp
   WriteTransform.cpp
   WriteOverrides.cpp
   jsoncpp.cpp
