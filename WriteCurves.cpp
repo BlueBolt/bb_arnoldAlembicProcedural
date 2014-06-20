@@ -177,6 +177,15 @@ AtNode * ProcessCurvesBase(
     Alembic::AbcGeom::ICurvesSchema  &ps = prim.getSchema();
     TimeSamplingPtr ts = ps.getTimeSampling();
    
+    if ( ps.getTopologyVariance() != kHeterogenousTopology )
+    {
+        GetRelevantSampleTimes( args, ts, ps.getNumSamples(), sampleTimes );
+    }
+    else
+    {
+        sampleTimes.insert( ( args.frame + args.frameOffset ) / args.fps );
+    }
+    
     std::string name = args.nameprefix + prim.getFullName();
     
     // check if this meshes name matches the search pattern in the arguments
@@ -197,7 +206,7 @@ AtNode * ProcessCurvesBase(
     // do custom attributes and assignments
 
     
-    sampleTimes.insert( ts->getFloorIndex(args.frame / args.fps, ps.getNumSamples()).second );
+    // sampleTimes.insert( ts->getFloorIndex(args.frame / args.fps, ps.getNumSamples()).second );
         
     AtNode * instanceNode = NULL;
     
@@ -299,7 +308,6 @@ AtNode * ProcessCurvesBase(
    
     if ( args.makeInstance  )
     {
-        AiMsgInfo("[ABC] Making Instance for shape %s", name.c_str());
         std::ostringstream buffer;
         AbcA::ArraySampleKey sampleKey;
         
@@ -381,6 +389,8 @@ AtNode * ProcessCurvesBase(
     size_t numCurves;
     size_t pSize;
 
+    std::vector<float> vlist;
+
     Int32ArraySamplePtr nVertices;
 
     bool isFirstSample = true;
@@ -436,18 +446,18 @@ AtNode * ProcessCurvesBase(
             }
         }
         
-        pSize = sample.getPositions()->size(); 
 
-
-        Alembic::Abc::V3fArraySamplePtr velptr = sample.getVelocities();
-        Alembic::Abc::P3fArraySamplePtr v3ptr = sample.getPositions();
         
         if(numSampleTimes == 1 && (args.shutterOpen != args.shutterClose) && (ps.getVelocitiesProperty().valid()) && isFirstSample )
         {
             float scaleVelocity = 1.0f;
             if (AiNodeLookUpUserParameter(args.proceduralNode, "scaleVelocity") !=NULL )
                 scaleVelocity = AiNodeGetFlt(args.proceduralNode, "scaleVelocity");
-            vidxs.resize(pSize*3*2);
+
+            Alembic::Abc::V3fArraySamplePtr velptr = sample.getVelocities();
+            Alembic::Abc::P3fArraySamplePtr v3ptr = sample.getPositions();
+            pSize = sample.getPositions()->size(); 
+            vlist.resize(pSize*3*2);
             numSampleTimes = 2;
 
             float timeoffset = ((args.frame / args.fps) - ts->getFloorIndex((*I), ps.getNumSamples()).second) * args.fps;
@@ -456,34 +466,26 @@ AtNode * ProcessCurvesBase(
             {
                 
                 Alembic::Abc::V3f posAtOpen = ((*v3ptr)[vId] + (*velptr)[vId] * scaleVelocity *-timeoffset);
-                AtPoint pos1;
-                pos1.x = posAtOpen.x;
-                pos1.y = posAtOpen.y;
-                pos1.z = posAtOpen.z;
-                vidxs[vId]= pos1;
+                vlist[3*vId + 0] = posAtOpen.x;
+                vlist[3*vId + 1] = posAtOpen.y;
+                vlist[3*vId + 2] = posAtOpen.z;
 
 
                 Alembic::Abc::V3f posAtEnd = ((*v3ptr)[vId] + (*velptr)[vId] * scaleVelocity *(1.0f-timeoffset));
-                AtPoint pos2;
-                pos2.x = posAtEnd.x;
-                pos2.y = posAtEnd.y;
-                pos2.z = posAtEnd.z;          
-                vidxs[vId+pSize]= pos1;
+                vlist[3*vId + 3*pSize + 0] = posAtEnd.x;
+                vlist[3*vId + 3*pSize + 1] = posAtEnd.y;
+                vlist[3*vId + 3*pSize + 2] = posAtEnd.z;     
 
                 // radius.push_back(radiusCurve);  
             }
         }
         else
         {
-          for ( size_t pId = 0; pId < pSize; ++pId ) 
-          {
-            AtPoint pos;
-            pos.x = (*v3ptr)[pId].x;
-            pos.y = (*v3ptr)[pId].y;
-            pos.z = (*v3ptr)[pId].z;
-            vidxs.push_back(pos);
-            // radius.push_back(radiusCurve);
-          }
+            vlist.reserve( vlist.size() + sample.getPositions()->size() * 3);
+            vlist.insert( vlist.end(),
+                    (const float32_t*) sample.getPositions()->get(),
+                    ((const float32_t*) sample.getPositions()->get()) +
+                            sample.getPositions()->size() * 3 );
         }
     }
 
@@ -518,6 +520,9 @@ AtNode * ProcessCurvesBase(
 
         // as splines require two less vtx widths per curve we crop out the 
         // second and second to last width before outputing to radlist vector
+        //
+        // This is actually incorrect this is just because the first and last 
+        // vtx are not expected to be rendered in a b-spline.
         if ( !fullradlist.empty() )
         {
           unsigned int w_start = w_end;
@@ -668,9 +673,13 @@ AtNode * ProcessCurvesBase(
     AiNodeSetArray(curvesNode, "num_points", curveNumPoints);
 
     // the point positions for the curves
+    // AiNodeSetArray(curvesNode, "points",
+    //       AiArrayConvert(vidxs.size(), 1, AI_TYPE_POINT,
+    //               (void*)&vidxs[0]));
+
     AiNodeSetArray(curvesNode, "points",
-          AiArrayConvert(vidxs.size(), 1, AI_TYPE_POINT,
-                  (void*)&vidxs[0]));
+          AiArrayConvert( vlist.size() / sampleTimes.size(),
+                  sampleTimes.size(), AI_TYPE_FLOAT, (void*)(&(vlist[0]))));
 
     // radius
     AiNodeSetArray(curvesNode, "radius",curveWidths);
