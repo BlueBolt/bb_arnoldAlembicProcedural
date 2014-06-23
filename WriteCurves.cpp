@@ -172,7 +172,7 @@ AtNode * ProcessCurvesBase(
     }
     
 
-    // Get the tiome samples for this geo
+    // Get the time samples for this geo
 
     Alembic::AbcGeom::ICurvesSchema  &ps = prim.getSchema();
     TimeSamplingPtr ts = ps.getTimeSampling();
@@ -185,7 +185,7 @@ AtNode * ProcessCurvesBase(
     {
         sampleTimes.insert( ( args.frame + args.frameOffset ) / args.fps );
     }
-    
+
     std::string name = args.nameprefix + prim.getFullName();
     
     // check if this meshes name matches the search pattern in the arguments
@@ -522,7 +522,10 @@ AtNode * ProcessCurvesBase(
         // second and second to last width before outputing to radlist vector
         //
         // This is actually incorrect this is just because the first and last 
-        // vtx are not expected to be rendered in a b-spline.
+        // vtx are not expected to be rendered in a b-spline. 
+        // We need to change it so we add a vtx to the start/end rather than 
+        // removing data from the radius
+        
         if ( !fullradlist.empty() )
         {
           unsigned int w_start = w_end;
