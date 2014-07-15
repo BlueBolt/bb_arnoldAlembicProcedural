@@ -333,7 +333,13 @@ int ProcInit( struct AtNode *node, void **user_ptr )
         skipDisplacement = AiNodeGetBool(node, "skipDisplacements");
     if (AiNodeLookUpUserParameter(node, "skipUserAttributes") !=NULL )
         skipUserAttributes = AiNodeGetBool(node, "skipUserAttributes");
-    
+
+    bool overrideShaders = false;
+    bool overrideDisplacements = false;
+    if (AiNodeLookUpUserParameter(node, "overrideShaders") !=NULL )
+        overrideShaders = AiNodeGetBool(node, "overrideShaders");
+    if (AiNodeLookUpUserParameter(node, "overrideDisplacements") !=NULL )
+        overrideDisplacements = AiNodeGetBool(node, "overrideDisplacements");    
 
     Json::Value jrootShaders;
     Json::Value jrootOverrides;
@@ -459,7 +465,7 @@ int ProcInit( struct AtNode *node, void **user_ptr )
                                         }
                                     }
                                 }
-                                if(tmp.size() == 0)
+                                if(tmp.size() == 0 || overrideShaders == true)
                                 {
                                     newJrootShaders[itr.key().asString()] = jrootShadersOverrides[itr.key().asString()];
                                 }
@@ -515,7 +521,7 @@ int ProcInit( struct AtNode *node, void **user_ptr )
                                         }
                                     }
                                 }
-                                if(tmp.size() == 0)
+                                if(tmp.size() == 0|| overrideDisplacements == true)
                                 {
                                     newJrootDisplacements[itr.key().asString()] = jrootDisplacementsOverrides[itr.key().asString()];
                                 }
