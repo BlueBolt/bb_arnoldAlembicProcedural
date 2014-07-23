@@ -339,7 +339,9 @@ int ProcInit( struct AtNode *node, void **user_ptr )
     Json::Value jrootOverrides;
     Json::Value jrootDisplacements;
     Json::Value jrootUserAttributes;
-    bool parsingSuccessful = false;
+    bool shaderJSONParsingSuccessful = false;
+    bool overridesJSONParsingSuccessful = false;
+    bool userAttributesJSONParsingSuccessful = false;
 
     // Load attribute overrides if there is a attribute present pointing to an overrides file
     if (AiNodeLookUpUserParameter(node, "overridefile") !=NULL && skipJson == false)
@@ -347,8 +349,8 @@ int ProcInit( struct AtNode *node, void **user_ptr )
         Json::Value jroot;
         Json::Reader reader;
         std::ifstream test(AiNodeGetStr(node, "overridefile"), std::ifstream::binary);
-        parsingSuccessful = reader.parse( test, jroot, false );
-        if ( parsingSuccessful )
+        overridesJSONParsingSuccessful = reader.parse( test, jroot, false );
+        if ( overridesJSONParsingSuccessful )
         {
             /* OVERRIDES */
             if(skipOverrides == false)
@@ -385,8 +387,8 @@ int ProcInit( struct AtNode *node, void **user_ptr )
         Json::Value jroot;
         Json::Reader reader;
         std::ifstream test(AiNodeGetStr(node, "userAttributesfile"), std::ifstream::binary);
-        parsingSuccessful = reader.parse( test, jroot, false );
-        if ( parsingSuccessful )
+        userAttributesJSONParsingSuccessful = reader.parse( test, jroot, false );
+        if ( userAttributesJSONParsingSuccessful )
         {
             /* OVERRIDES */
             if(skipOverrides == false)
@@ -419,8 +421,8 @@ int ProcInit( struct AtNode *node, void **user_ptr )
         Json::Value jroot;
         Json::Reader reader;
         std::ifstream test(AiNodeGetStr(node, "shaderAssignmentfile"), std::ifstream::binary);
-        parsingSuccessful = reader.parse( test, jroot, false );
-        if ( parsingSuccessful )
+        shaderJSONParsingSuccessful = reader.parse( test, jroot, false );
+        if ( shaderJSONParsingSuccessful )
         {
 
             /* SHADERS */
@@ -539,18 +541,22 @@ int ProcInit( struct AtNode *node, void **user_ptr )
     
     // Catch if the json data is in the optional attributes shaderAssignation,overrides,displacementAssignation
     // instead of parsing the two json files
-    if(!parsingSuccessful)
-    {
+    if(!overridesJSONParsingSuccessful)    
         if (AiNodeLookUpUserParameter(node, "overrides") !=NULL  && skipOverrides == false)
         {
             Json::Reader reader;
             bool parsingSuccessful = reader.parse( AiNodeGetStr(node, "overrides"), jrootOverrides );
         }
+
+    if(!userAttributesJSONParsingSuccessful)
         if (AiNodeLookUpUserParameter(node, "userAttributes") !=NULL  && skipUserAttributes == false)
         {
             Json::Reader reader;
             bool parsingSuccessful = reader.parse( AiNodeGetStr(node, "userAttributes"), jrootUserAttributes );
         }
+
+    if(!shaderJSONParsingSuccessful)
+    {
         if (AiNodeLookUpUserParameter(node, "shaderAssignation") !=NULL && skipShaders == false)
         {
             Json::Reader reader;

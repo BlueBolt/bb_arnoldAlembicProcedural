@@ -239,7 +239,8 @@ AtNode * ProcessPolyMeshBase(
               Json::Reader reader;
               if(reader.parse(valueSample->get()[0], jtags))
                 for( Json::ValueIterator itr = jtags.begin() ; itr != jtags.end() ; itr++ )
-                {
+                { 
+                  AiMsgDebug("[ABC] Tag '%s' added to tags list",jtags[itr.key().asUInt()].asString());
                   tags.push_back(jtags[itr.key().asUInt()].asString());
                 }
             }
@@ -399,16 +400,35 @@ AtNode * ProcessPolyMeshBase(
 
         NodeCache::iterator I = g_meshCache.find(cacheId);
 
+        if (args.linkUserAttributes)
+        {
+            ApplyUserAttributes(name, instanceNode, tags,  args);
+        }
+
+        // If the current node has a user attribute called tags, parse it and add these tags to the tags list
+        if (AiNodeLookUpUserParameter(instanceNode, "tags") != NULL)
+        {
+            Json::Value jtags;
+            Json::Reader reader;
+
+            if(reader.parse( AiNodeGetStr(instanceNode, "tags"), jtags))
+            {
+              for( Json::ValueIterator itr = jtags.begin() ; itr != jtags.end() ; itr++ )
+              { 
+
+                if ( std::find(tags.begin(), tags.end(), jtags[itr.key().asUInt()].asString()) == tags.end() )
+                {
+                  tags.push_back(jtags[itr.key().asUInt()].asString());
+                }
+              }
+            }
+        }
+
         // start param overrides on instance
         if(args.linkOverride)
         {
             ApplyOverrides(name, instanceNode, tags, args );
         }   
-
-        if (args.linkUserAttributes)
-        {
-            ApplyUserAttributes(name, instanceNode, tags,  args);
-        }
 
         // shader assignation
         if (nodeHasParameter( instanceNode, "shader" ) )
@@ -606,7 +626,7 @@ AtNode * ProcessPolyMeshBase(
     // displaces assignation
 
     if(appliedDisplacement!= NULL)
-    AiNodeSetPtr(meshNode, "disp_map", appliedDisplacement);
+      AiNodeSetPtr(meshNode, "disp_map", appliedDisplacement);
 
     if ( instanceNode != NULL)
     {
@@ -781,6 +801,30 @@ AtNode * ProcessPolyMeshBase(
       if ( xformSamples )
       {
           ApplyTransformation( meshNode, xformSamples, args );
+      }
+
+      if (args.linkUserAttributes)
+      {
+          ApplyUserAttributes(name, meshNode, tags,  args);
+      }
+
+      // If the current node has a user attribute called tags, parse it and add these tags to the tags list
+      if (AiNodeLookUpUserParameter(meshNode, "tags") != NULL)
+      {
+          Json::Value jtags;
+          Json::Reader reader;
+
+          if(reader.parse( AiNodeGetStr(meshNode, "tags"), jtags))
+          {
+            for( Json::ValueIterator itr = jtags.begin() ; itr != jtags.end() ; itr++ )
+            { 
+
+              if ( std::find(tags.begin(), tags.end(), jtags[itr.key().asUInt()].asString()) == tags.end() )
+              {
+                tags.push_back(jtags[itr.key().asUInt()].asString());
+              }
+            }
+          }
       }
               // shader assignation
       if (nodeHasParameter( meshNode, "shader" ) )
