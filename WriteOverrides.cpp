@@ -197,8 +197,10 @@ void ApplyUserAttributes(std::string name, AtNode* node,std::vector<std::string>
         {
             std::string attribute = itr.key().asString();
 
-            const AtNodeEntry* nodeEntry = AiNodeGetNodeEntry(node);
+            if( AiNodeLookUpUserParameter(node,attribute.c_str()))
+              continue;
 
+            const AtNodeEntry* nodeEntry = AiNodeGetNodeEntry(node);
             Json::Value val = args.userAttributesRoot[*it][attribute];
             if( val.isString() ) 
             {
@@ -225,6 +227,36 @@ void ApplyUserAttributes(std::string name, AtNode* node,std::vector<std::string>
               AddUserGeomParams(node,attribute.c_str(),AI_TYPE_FLOAT);
               AiNodeSetFlt(node, attribute.c_str(), val.asDouble());
             }
+            else if(val.isArray()) 
+            {              
+
+              // in the future we will convert to an arnold array type for now lets just 
+              // write out a json string
+
+              AddUserGeomParams(node,attribute.c_str(),AI_TYPE_STRING);
+              Json::FastWriter writer;
+              AiNodeSetStr(node, attribute.c_str(), writer.write(val).c_str());
+              
+              // AddUserGeomParams(node,attribute.c_str(),AI_TYPE_ARRAY );
+
+              // // get the type of the first entry, this will be our key as to
+              // // what type of data is in this array
+              // Json::Value firstValue = val[0];
+              // if (firstValue.isString())
+              // {
+              //   AtArray* arrayValues = AiArrayAllocate( val.size() , 1, AI_TYPE_STRING);
+
+              //   for( uint idx = 0 ; idx != val.size() ; idx++ ) 
+              //   {
+              //     AiMsgInfo("[ABC] adding string %s to user array attribute '%s'",val[idx].asCString(),attribute.c_str());
+              //     AiArraySetStr(arrayValues,idx,val[idx].asCString());
+              //   }
+
+              //   AiNodeSetArray(node, attribute.c_str(), arrayValues);         
+              // }
+     
+            }
+
             // TODO color, matrix, vector
 
          }
@@ -248,17 +280,20 @@ void ApplyShaders(std::string name, AtNode* node, std::vector<std::string> tags,
          foundInPath = true;
        }
      }
+     else if(foundInPath == false)
+     {
+       if (std::find(tags.begin(), tags.end(), it->first) != tags.end())
+       {
+         AiMsgDebug("[ABC] Shader tag '%s' matched tag on %s",it->first.c_str(), name.c_str());
+         appliedShader = it->second;
+       }
+     }
      else if(matchPattern(name,it->first)) // based on wildcard expression
      {
 
         AiMsgDebug("[ABC] Shader pattern '%s' matched %s",it->first.c_str(), name.c_str());
         appliedShader = it->second;
         foundInPath = true;
-     }
-     else if(foundInPath == false)
-     {
-       if (std::find(tags.begin(), tags.end(), it->first) != tags.end())
-         appliedShader = it->second;
      }
    }
 
