@@ -284,7 +284,7 @@ void ApplyShaders(std::string name, AtNode* node, std::vector<std::string> tags,
      {
        if (std::find(tags.begin(), tags.end(), it->first) != tags.end())
        {
-         AiMsgInfo("[ABC] Shader tag '%s' matched tag on %s",it->first.c_str(), name.c_str());
+         AiMsgDebug("[ABC] Shader tag '%s' matched tag on %s",it->first.c_str(), name.c_str());
          appliedShader = it->second;
        }
      }
