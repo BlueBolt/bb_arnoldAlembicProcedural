@@ -219,7 +219,7 @@ AtNode * ProcessPolyMeshBase(
     ISampleSelector frameSelector( *singleSampleTimes.begin() );
     std::vector<std::string> tags;
 
-    // get tags
+    // get tags from attributes on object
     if ( arbGeomParams != NULL && arbGeomParams.valid() )
     {
       if (arbGeomParams.getPropertyHeader("mtoa_constant_tags") != NULL)
@@ -249,40 +249,7 @@ AtNode * ProcessPolyMeshBase(
       }
     }
 
-    // displacement stuff
-    AtNode* appliedDisplacement = NULL;
-    if(args.linkDisplacement)
-    {
-      bool foundInPath = false;
-      for(std::map<std::string, AtNode*>::iterator it = args.displacements.begin(); it != args.displacements.end(); ++it) 
-      {
-        //check both path & tag
-        if(it->first.find("/") != string::npos)
-        {
-          if(name.find(it->first) != string::npos)
-          {
-            appliedDisplacement = it->second;
-            foundInPath = true;
-          }
-
-        }
-        else if(matchPattern(name,it->first)) // based on wildcard expression
-        {
-            appliedDisplacement = it->second;
-            foundInPath = true;
-        }
-        else if(foundInPath == false)
-        {
-          if (std::find(tags.begin(), tags.end(), it->first) != tags.end())
-          {
-            appliedDisplacement = it->second;
-          }
-
-        }     
-      }
-    }
-
-    
+   
     // overrides that can't be applied on instances
     // we create a hash from that.
     std::string hashAttributes("@");
@@ -342,12 +309,6 @@ AtNode * ProcessPolyMeshBase(
           }
         }
       }
-    }
-
-    if(appliedDisplacement != NULL)
-    {
-      rootEncode["disp_shader"] = std::string(AiNodeGetName(appliedDisplacement));
-
     }
 
     hashAttributes += writer.write(rootEncode);
@@ -623,11 +584,6 @@ AtNode * ProcessPolyMeshBase(
     }
     }
 
-    // displaces assignation
-
-    if(appliedDisplacement!= NULL)
-      AiNodeSetPtr(meshNode, "disp_map", appliedDisplacement);
-
     if ( instanceNode != NULL)
     {
       AiNodeSetStr( meshNode, "name", (name + ":src").c_str() );
@@ -790,6 +746,18 @@ AtNode * ProcessPolyMeshBase(
         AiNodeSetBool( meshNode, "invert_normals", args.invertNormals );
     }
 
+    // displacement assignation
+
+    // if(appliedDisplacement!= NULL)
+    //   AiNodeSetPtr(meshNode, "disp_map", appliedDisplacement);
+
+    if (args.linkDisplacement)
+    {
+      ApplyDisplacement(name,meshNode,tags,args);
+    }
+
+    // if a displacment has been fed to the disp_map flag,
+    // override any displacements that have previously been applied
     if ( args.disp_map != "" )
     {
         AtNode* disp_node = AiNodeLookUpByName(args.disp_map.c_str());
