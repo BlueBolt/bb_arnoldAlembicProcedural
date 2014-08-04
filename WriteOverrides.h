@@ -46,5 +46,6 @@
 void ApplyOverrides(std::string name, AtNode* node, std::vector<std::string> tags, ProcArgs & args);
 void ApplyUserAttributes(std::string name, AtNode* node, std::vector<std::string> tags, ProcArgs & args);
 void ApplyShaders(std::string name, AtNode* node, std::vector<std::string> tags, ProcArgs & args);
+void ApplyDisplacement(std::string name, AtNode* node, std::vector<std::string> tags, ProcArgs & args);
 
 #endif
