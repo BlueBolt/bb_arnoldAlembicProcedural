@@ -280,6 +280,13 @@ void ApplyShaders(std::string name, AtNode* node, std::vector<std::string> tags,
          foundInPath = true;
        }
      }
+     else if(matchPattern(name,it->first)) // based on wildcard expression
+     {
+
+        AiMsgDebug("[ABC] Shader pattern '%s' matched %s",it->first.c_str(), name.c_str());
+        appliedShader = it->second;
+        foundInPath = true;
+     }
      else if(foundInPath == false)
      {
        if (std::find(tags.begin(), tags.end(), it->first) != tags.end())
@@ -287,13 +294,6 @@ void ApplyShaders(std::string name, AtNode* node, std::vector<std::string> tags,
          AiMsgDebug("[ABC] Shader tag '%s' matched tag on %s",it->first.c_str(), name.c_str());
          appliedShader = it->second;
        }
-     }
-     else if(matchPattern(name,it->first)) // based on wildcard expression
-     {
-
-        AiMsgDebug("[ABC] Shader pattern '%s' matched %s",it->first.c_str(), name.c_str());
-        appliedShader = it->second;
-        foundInPath = true;
      }
    }
 
@@ -314,3 +314,49 @@ void ApplyShaders(std::string name, AtNode* node, std::vector<std::string> tags,
         AiNodeSetArray(node, "shader", AiArrayCopy(shaders));
    }
 }
+
+void ApplyDisplacement(std::string name, AtNode* node, std::vector<std::string> tags, ProcArgs & args)
+{
+   bool foundInPath = false;
+   AtNode* appliedDisplacement = NULL;
+   for(std::map<std::string, AtNode*>::iterator it = args.displacements.begin(); it != args.displacements.end(); ++it) 
+   {
+
+     //check both path & tag
+     if(it->first.find("/") != std::string::npos)
+     {
+       if(name.find(it->first) != std::string::npos)
+       {
+         appliedDisplacement = it->second;
+         foundInPath = true;
+       }
+     }
+     else if(matchPattern(name,it->first)) // based on wildcard expression
+     {
+
+        AiMsgDebug("[ABC] Displacement pattern '%s' matched %s",it->first.c_str(), name.c_str());
+        appliedDisplacement = it->second;
+        foundInPath = true;
+     }
+     else if(foundInPath == false)
+     {
+       if (std::find(tags.begin(), tags.end(), it->first) != tags.end())
+       {
+         AiMsgDebug("[ABC] Displacement tag '%s' matched tag on %s",it->first.c_str(), name.c_str());
+         appliedDisplacement = it->second;
+       }
+     }
+   }
+
+   if(appliedDisplacement != NULL)
+   {
+     std::string newName = std::string(AiNodeGetName(appliedDisplacement)) + std::string("_") + name;
+     AtArray* shaders = AiArrayAllocate( 1 , 1, AI_TYPE_NODE);
+     
+     AiMsgDebug("[ABC] Assigning Displacement  %s to %s", AiNodeGetName(appliedDisplacement), AiNodeGetName(node));
+     AiArraySetPtr(shaders, 0, appliedDisplacement);
+     
+     AiNodeSetArray(node, "disp_map", shaders);
+   }
+}
+
