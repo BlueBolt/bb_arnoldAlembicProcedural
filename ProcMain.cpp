@@ -118,9 +118,11 @@ void WalkObject( IObject parent, const ObjectHeader &ohead, ProcArgs &args,
                 
                 MatrixSampleMap * localXformSamplesToFill = 0;
                 
-                concatenatedXformSamples.reset(new MatrixSampleMap);
-                
-                if ( !xformSamples )
+                concatenatedXformSamples.reset(new MatrixSampleMap);  
+
+                bool inheritsXform = xs.getInheritsXforms();
+
+                if ( !xformSamples || !inheritsXform )
                 {
                     // If we don't have parent xform samples, we can fill
                     // in the map directly.
@@ -141,7 +143,7 @@ void WalkObject( IObject parent, const ObjectHeader &ohead, ProcArgs &args,
                     (*localXformSamplesToFill)[(*I)] = sample.getMatrix();
                 }
                 
-                if ( xformSamples )
+                if ( xformSamples && inheritsXform )
                 {
                     ConcatenateXformSamples(args,
                             *xformSamples,
