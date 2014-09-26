@@ -105,6 +105,9 @@ void WalkObject( IObject parent, const ObjectHeader &ohead, ProcArgs &args,
             
             IXformSchema &xs = xform.getSchema();
             
+            // Check if this xform inherits from it's parent
+            bool inheritsXform = xs.getInheritsXforms();
+
             if ( xs.getNumOps() > 0 )
             { 
                 TimeSamplingPtr ts = xs.getTimeSampling();
@@ -119,8 +122,6 @@ void WalkObject( IObject parent, const ObjectHeader &ohead, ProcArgs &args,
                 MatrixSampleMap * localXformSamplesToFill = 0;
                 
                 concatenatedXformSamples.reset(new MatrixSampleMap);  
-
-                bool inheritsXform = xs.getInheritsXforms();
 
                 if ( !xformSamples || !inheritsXform )
                 {
@@ -154,6 +155,11 @@ void WalkObject( IObject parent, const ObjectHeader &ohead, ProcArgs &args,
                 
                 xformSamples = concatenatedXformSamples.get();
                 
+            } else {
+                if (!inheritsXform)
+                {                        
+                    xformSamples = concatenatedXformSamples.get();
+                }
             }
             
             nextParentObject = xform;
